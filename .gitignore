@@ -1,0 +1,60 @@
+# Working documents are never committed. Every document is ignored by default;
+# a deliverable document is committed only when it is whitelisted below.
+*.md
+!README.md
+*.doc
+*.docx
+*.odt
+*.pdf
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+archive/
+.claude/
+.cursor/
+.cursorrules
+.windsurf/
+.aider*
+.continue/
+.codex/
+.github/copilot-instructions.md
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+keystore/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/deployments/local/
+
+# Local material outside the submission
+ref/
+docs/video/
+docs/demo-video/
+docs/demo-script.md
+docs/diagrams/
+docs/logo/
+infra/
+
+# Tooling output
+.release/
+reports/
+*.log
+.DS_Store
+Thumbs.db

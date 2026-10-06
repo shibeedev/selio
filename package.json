@@ -1,0 +1,22 @@
+{
+  "name": "selio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Exit market for frozen lending pools on Monad",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @selio/sdk -w @selio/forkkit -w @selio/mcp -w @selio/backend -w @selio/web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "abis": "node packages/sdk/scripts/export-abis.mjs",
+    "test:contracts": "cd contracts && forge test"
+  },
+  "engines": {
+    "node": ">=22.15"
+  }
+}

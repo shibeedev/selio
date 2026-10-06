@@ -1,0 +1,23 @@
+{
+  "name": "@selio/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unattended end-to-end scenario runner on anvil forks and live networks",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "e2e": "tsx src/run.ts",
+    "fork:up": "tsx src/fork-up.ts",
+    "ui": "tsx src/ui.ts"
+  },
+  "dependencies": {
+    "@selio/forkkit": "*",
+    "@selio/sdk": "*",
+    "viem": "2.57.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}
