@@ -14,6 +14,7 @@ const contracts = [
   ["AaveCollateralRoute", "aaveCollateralRouteAbi"],
   ["PriceRouter", "priceRouterAbi"],
   ["TestToken", "testTokenAbi"],
+  ["KuruSellRouter", "kuruSellRouterAbi"],
 ];
 
 const index = [];

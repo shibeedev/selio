@@ -42,6 +42,33 @@ export const selioVaultAbi = [
         "name": "sourceProbe_",
         "type": "address",
         "internalType": "contract ISourceProbe"
+      },
+      {
+        "name": "kuru",
+        "type": "tuple[]",
+        "internalType": "struct SelioVault.KuruLeg[]",
+        "components": [
+          {
+            "name": "book",
+            "type": "address",
+            "internalType": "contract IKuruOrderBook"
+          },
+          {
+            "name": "margin",
+            "type": "address",
+            "internalType": "contract IKuruMarginAccount"
+          },
+          {
+            "name": "wrapper",
+            "type": "address",
+            "internalType": "contract IStataToken"
+          }
+        ]
+      },
+      {
+        "name": "kuruShareBps_",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "nonpayable"
@@ -197,6 +224,35 @@ export const selioVaultAbi = [
   },
   {
     "type": "function",
+    "name": "claimKuru",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "cash",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "receipts",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "claimable",
     "inputs": [
       {
@@ -327,6 +383,188 @@ export const selioVaultAbi = [
         "name": "idle",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "kuruClaimOf",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "i",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "epoch",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "wad",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "kuruFills",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "units",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "paid",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "kuruLeg",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "book",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "margin",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "wrapper",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "orderId",
+        "type": "uint40",
+        "internalType": "uint40"
+      },
+      {
+        "name": "price",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "placedSize",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "escrow",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "baseAtPlace",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "kuruOp",
+    "inputs": [
+      {
+        "name": "op",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "i",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "a",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "b",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "kuruOrderState",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "active",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "remainingSize",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "refundValue",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "pendingCost",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "kuruShareBps",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "view"
@@ -797,6 +1035,167 @@ export const selioVaultAbi = [
   },
   {
     "type": "event",
+    "name": "KuruClaimDeferred",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "i",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "epoch",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "wad",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KuruClaimPaid",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "i",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "cash",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "receipts",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KuruOrderPlaced",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "orderId",
+        "type": "uint40",
+        "indexed": false,
+        "internalType": "uint40"
+      },
+      {
+        "name": "price",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "size",
+        "type": "uint96",
+        "indexed": false,
+        "internalType": "uint96"
+      },
+      {
+        "name": "escrow",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KuruSynced",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "units",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "paid",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "refund",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "untrackedBase",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KuruUnavailable",
+    "inputs": [
+      {
+        "name": "i",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "reason",
+        "type": "bytes",
+        "indexed": false,
+        "internalType": "bytes"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ReceiptClaimed",
     "inputs": [
       {
@@ -1132,6 +1531,16 @@ export const selioVaultAbi = [
         "internalType": "uint256"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "NotSelf",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NothingToClaim",
+    "inputs": []
   },
   {
     "type": "error",
