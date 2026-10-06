@@ -6,8 +6,10 @@ import { join } from "node:path";
 import { createChainLayer } from "@selio/mcp";
 import type { Express } from "express";
 import request from "supertest";
+import { createSiweMessage } from "viem/siwe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
+import { loadConfig } from "./config/index.js";
 import type { WebhookPayload } from "./modules/alerts/index.js";
 import type { Db } from "./shared/db/database.js";
 import {
@@ -218,6 +220,83 @@ describe("auth", () => {
       .send({ message: "x", signature: "0x1234" })
       .expect(400);
     expect(badSignature.body.details).toEqual([{ path: "signature", message: "must be a 65-byte 0x-prefixed hex signature" }]);
+  });
+});
+
+describe("web origins", () => {
+  // The web app's dev server (5173) and `vite preview` (4173).
+  const LOCAL_WEB_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"];
+  const appFor = (corsOrigin: string) => createApp({ db, logger: silentLogger, chain, mcpChain: emptyMcpChain, corsOrigin }).app;
+
+  /** Posts a sign-in message signed by SIGNER on the web origin `origin`: domain is its host and URI the origin, as the web app signs. */
+  async function verifyOn(target: Express, origin: string) {
+    const { nonce } = (await request(target).post("/api/auth/nonce").send({ address: SIGNER.address }).expect(200)).body;
+    const message = createSiweMessage({
+      address: SIGNER.address,
+      chainId: 10143,
+      domain: new URL(origin).host,
+      nonce,
+      uri: origin,
+      version: "1",
+    });
+    return request(target).post("/api/auth/verify").send({ message, signature: await SIGNER.signMessage({ message }) });
+  }
+
+  it("lets the local web origins call the API and sign in under the default CORS_ORIGIN", async () => {
+    const byDefault = appFor(loadConfig({}).corsOrigin);
+    for (const origin of LOCAL_WEB_ORIGINS) {
+      const res = await request(byDefault).get("/healthz").set("Origin", origin).expect(200);
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+      const preflight = await request(byDefault).options("/api/alerts").set("Origin", origin).expect(204);
+      expect(preflight.headers["access-control-allow-origin"]).toBe("*");
+      expect((await verifyOn(byDefault, origin)).status).toBe(200);
+    }
+  });
+
+  it("allows only the listed origins of a comma-separated CORS_ORIGIN", async () => {
+    const listed = appFor("https://selio.site, http://localhost:5173 ,");
+    for (const origin of ["https://selio.site", "http://localhost:5173"]) {
+      const res = await request(listed).get("/healthz").set("Origin", origin).expect(200);
+      expect(res.headers["access-control-allow-origin"]).toBe(origin);
+      expect(res.headers.vary).toBe("Origin");
+    }
+    const unlisted = await request(listed).get("/healthz").set("Origin", "https://evil.example").expect(200);
+    expect(unlisted.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(unlisted.headers.vary).toBe("Origin");
+    const noOrigin = await request(listed).get("/healthz").expect(200);
+    expect(noOrigin.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(noOrigin.headers.vary).toBe("Origin");
+    const preflight = await request(listed).options("/api/alerts").set("Origin", "https://evil.example").expect(204);
+    expect(preflight.headers["access-control-allow-methods"]).toBe("GET, POST, DELETE, OPTIONS");
+    expect(preflight.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("accepts sign-in messages for the host of each listed origin and rejects other hosts", async () => {
+    const origins = ["https://selio.site", ...LOCAL_WEB_ORIGINS];
+    const listed = appFor(origins.join(", "));
+    for (const origin of origins) {
+      const res = await verifyOn(listed, origin);
+      expect(res.status).toBe(200);
+      expect(res.body.owner).toBe(signer);
+    }
+    for (const origin of ["https://evil.example", "https://www.selio.site", "http://localhost:5174", "http://localhost"]) {
+      const res = await verifyOn(listed, origin);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({
+        code: "INVALID_SIWE_MESSAGE",
+        message: `Sign-in message is for ${new URL(origin).host}, not this site`,
+      });
+    }
+  });
+
+  it("serves only https://selio.site with the hosted CORS_ORIGIN", async () => {
+    const hosted = appFor("https://selio.site");
+    const site = await request(hosted).get("/healthz").set("Origin", "https://selio.site").expect(200);
+    expect(site.headers["access-control-allow-origin"]).toBe("https://selio.site");
+    expect((await verifyOn(hosted, "https://selio.site")).status).toBe(200);
+    const local = await request(hosted).get("/healthz").set("Origin", "http://localhost:5173").expect(200);
+    expect(local.headers["access-control-allow-origin"]).toBeUndefined();
+    expect((await verifyOn(hosted, "http://localhost:5173")).status).toBe(400);
   });
 });
 
