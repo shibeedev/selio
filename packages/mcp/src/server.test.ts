@@ -74,6 +74,7 @@ describe("MCP server", () => {
       expect(tool.description?.length).toBeGreaterThan(40);
       expect(tool.title).toBeTruthy();
       expect(tool.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });
+      expect(tool.execution).toEqual({ taskSupport: "forbidden" });
       expect(tool.inputSchema.required).toEqual(TOOLS[tool.name]);
       if (tool.name !== "list_networks") expect(tool.inputSchema.required).toContain("network");
     }

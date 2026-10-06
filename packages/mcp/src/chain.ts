@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { createPublicClient, http, parseAbi, type Address, type Hex, type PublicClient, type Transport } from "viem";
+import { createPublicClient, http, parseAbi, zeroAddress, type Address, type Hex, type PublicClient, type Transport } from "viem";
 import {
   NETWORKS,
   SelioClient,
@@ -141,7 +141,7 @@ class RpcReads implements ChainReads {
   async vaultBaseYield(): Promise<BaseYieldState | null> {
     const vault = { address: this.deployment.selioVault, abi: selioVaultAbi } as const;
     const source = await this.client.readContract({ ...vault, functionName: "yieldSource" });
-    if (/^0x0{40}$/i.test(source)) return null;
+    if (source === zeroAddress) return null;
     const [sourceShares, sourceAssets, utilization] = await Promise.all([
       this.client.readContract({ ...vault, functionName: "sourceShares" }),
       this.client.readContract({ ...vault, functionName: "sourceAssets" }),
