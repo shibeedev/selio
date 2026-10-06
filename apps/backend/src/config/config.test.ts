@@ -46,4 +46,12 @@ describe("loadConfig", () => {
     expect(loadConfig({ NODE_ENV: "production" }).allowLocalhostWebhooks).toBe(false);
     expect(() => loadConfig({ RATE_LIMIT_WINDOW_MS: "10" })).toThrow(/RATE_LIMIT_WINDOW_MS/);
   });
+
+  it("reads INDEXER_URL as a URL for the hosted MCP", () => {
+    const url = "https://indexer.example/v1/graphql";
+    expect(loadConfig({ INDEXER_URL: url }).indexerUrl).toBe(url);
+    expect("indexerUrl" in loadConfig({})).toBe(false);
+    expect("indexerUrl" in loadConfig({ INDEXER_URL: "" })).toBe(false);
+    expect(() => loadConfig({ INDEXER_URL: "not a url" })).toThrow(/^Invalid configuration: INDEXER_URL: Invalid url$/);
+  });
 });

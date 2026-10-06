@@ -39,6 +39,8 @@ export interface AppDeps {
   /** Per-IP request limits; without them no request is limited. */
   requestLimits?: RequestLimits;
   mcpMaxReadsPerRequest?: number;
+  /** Event index that the MCP tool get_history reads; without it get_history is refused. */
+  indexerUrl?: string;
   allowLocalhostWebhooks?: boolean;
 }
 
@@ -95,7 +97,9 @@ export function createApp(deps: AppDeps) {
   app.use(auth.router);
   app.use(alerts.router);
   app.use(faucet.router);
-  app.use(createMcpModule({ chain: deps.mcpChain, maxReadsPerRequest: deps.mcpMaxReadsPerRequest }).router);
+  app.use(
+    createMcpModule({ chain: deps.mcpChain, maxReadsPerRequest: deps.mcpMaxReadsPerRequest, indexerUrl: deps.indexerUrl }).router,
+  );
   app.use(createRpcModule({ chain, upstream: deps.rpcUpstream }).router);
   app.use(notFound());
   app.use(errorHandler(logger));

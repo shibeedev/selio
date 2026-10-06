@@ -38,6 +38,7 @@ function main(): void {
     webhookSecret: config.webhookSecret,
     requestLimits: config.rateLimits,
     mcpMaxReadsPerRequest: config.mcpMaxReadsPerRequest,
+    indexerUrl: config.indexerUrl,
     allowLocalhostWebhooks: config.allowLocalhostWebhooks,
   });
   const poller = capacity.createPoller(config.pollIntervalMs, [

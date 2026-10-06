@@ -28,6 +28,7 @@ const envSchema = z.object({
   RATE_LIMIT_MCP: env(z.coerce.number().int().min(1).default(120)),
   RATE_LIMIT_RPC: env(z.coerce.number().int().min(1).default(1_200)),
   MCP_MAX_READS_PER_REQUEST: env(z.coerce.number().int().min(1).default(300)),
+  INDEXER_URL: env(z.string().url().optional()),
 });
 
 export interface AppConfig {
@@ -44,6 +45,8 @@ export interface AppConfig {
   allowLocalhostWebhooks: boolean;
   rateLimits: RequestLimits;
   mcpMaxReadsPerRequest: number;
+  /** GraphQL endpoint of the Selio event index, read by the hosted MCP's get_history. */
+  indexerUrl?: string;
 }
 
 export function rpcEnvName(key: NetworkKey): string {
@@ -84,5 +87,6 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): AppConfig {
       rpc: e.RATE_LIMIT_RPC,
     },
     mcpMaxReadsPerRequest: e.MCP_MAX_READS_PER_REQUEST,
+    ...(e.INDEXER_URL ? { indexerUrl: e.INDEXER_URL } : {}),
   };
 }

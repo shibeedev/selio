@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -411,6 +411,77 @@ describe("MCP over Streamable HTTP", () => {
       await vi.waitFor(() => expect(received["/bounded"]).toBe(3));
     } finally {
       await new Promise((resolve) => node.close(resolve));
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("hands indexerUrl to get_history as the event index it reads", async () => {
+    // A fills read uses only the network, market and underlying of the deployment.
+    const testnet = { ...USDT0_REPLAY_DEPLOYMENT, network: "monad-testnet", chainId: 10143 };
+    // An event index stand-in, indexed to block 500 with no fills, that records the paths it is asked on.
+    const asked: string[] = [];
+    const index = createServer((req, res) => {
+      asked.push(req.url ?? "");
+      req.resume();
+      req.on("end", () => {
+        const meta = { chainId: 10143, progressBlock: 500, sourceBlock: 505, isReady: true, readyAt: null };
+        const market = { id: testnet.market.toLowerCase(), updatedAt: 1 };
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ data: { _meta: [meta], market, fills: [], fees: [] } }));
+      });
+    });
+    // A testnet node stand-in at block 505 that answers every eth_call with zero words.
+    const node = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        const { id, method } = JSON.parse(body) as { id: number; method: string };
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ jsonrpc: "2.0", id, result: method === "eth_blockNumber" ? "0x1f9" : `0x${"00".repeat(160)}` }));
+      });
+    });
+    const urlOf = async (server: Server) => {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    };
+    const [indexUrl, nodeUrl] = await Promise.all([urlOf(index), urlOf(node)]);
+    const dir = mkdtempSync(join(tmpdir(), "selio-mcp-"));
+    writeFileSync(join(dir, "monad-testnet.json"), JSON.stringify(testnet));
+    const call = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "get_history", arguments: { network: "monad-testnet", view: "fills" } },
+    };
+    const appWith = (indexerUrl?: string) =>
+      createApp({
+        db,
+        logger: silentLogger,
+        chain,
+        mcpChain: createChainLayer({ deploymentsDir: dir, rpcUrls: { "monad-testnet": nodeUrl } }),
+        corsOrigin: "*",
+        indexerUrl,
+      }).app;
+    try {
+      const reply = await request(appWith(`${indexUrl}/v1/graphql`)).post("/mcp").set(MCP_HEADERS).send(call).expect(200);
+      expect(reply.body.result.isError).toBeUndefined();
+      expect(JSON.parse(reply.body.result.content[0].text).index).toEqual({
+        source: "Envio HyperIndex",
+        indexedToBlock: 500,
+        chainHead: 505,
+        lagBlocks: 5,
+        ready: true,
+      });
+      expect(asked).toEqual(["/v1/graphql"]);
+
+      const unset = await request(appWith()).post("/mcp").set(MCP_HEADERS).send(call).expect(200);
+      expect(unset.body.result.isError).toBe(true);
+      expect(unset.body.result.content[0].text).toBe(
+        "This MCP server has no Selio indexer configured (SELIO_INDEXER_URL, or INDEXER_URL on the hosted server).",
+      );
+      expect(asked).toHaveLength(1);
+    } finally {
+      await Promise.all([index, node].map((server) => new Promise((resolve) => server.close(resolve))));
       rmSync(dir, { recursive: true, force: true });
     }
   });
