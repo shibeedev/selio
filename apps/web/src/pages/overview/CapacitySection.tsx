@@ -6,6 +6,7 @@ import { parsePercentToBps } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
 import { useNetwork } from "../../lib/network-context";
 import { bidLevels, type BidLevel } from "../../lib/orderbook";
+import { AgentPanel } from "./AgentPanel";
 import { AlertForm } from "./AlertForm";
 import { CapacityTable } from "./CapacityTable";
 import { MyPools } from "./MyPools";
@@ -77,6 +78,7 @@ export function CapacitySection() {
               </div>
               <AlertForm threshold={threshold} onThreshold={setThreshold} />
             </div>
+            <AgentPanel selio={client} meta={m} />
           </>
         )}
       </DeploymentGate>

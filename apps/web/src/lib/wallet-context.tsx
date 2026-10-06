@@ -12,12 +12,17 @@ import {
   type WalletClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import type { WalletAccount } from "@dynamic-labs-sdk/client";
+import { dynamicEnvironmentId } from "./env";
 import { describeError } from "./errors";
 import { readStorage, writeStorage } from "./hooks";
 import { useNetwork } from "./network-context";
 
+/** The Dynamic SDK loads on first use only, so it stays out of the initial bundle. */
+export const loadDynamic = () => import("./dynamic");
+
 /** A new connection kind adds its name here and its client below. */
-export type WalletKind = "injected" | "demo";
+export type WalletKind = "injected" | "demo" | "embedded";
 
 export type ConnectedWalletClient = WalletClient<Transport, Chain, Account>;
 
@@ -26,6 +31,10 @@ export interface WalletContextValue {
   address: Address | null;
   walletClient: ConnectedWalletClient | null;
   hasInjected: boolean;
+  /** The build has a Dynamic environment, so the email or passkey wallet can sign in. */
+  hasEmbedded: boolean;
+  /** The Dynamic account of the connected email or passkey wallet. */
+  embeddedAccount: WalletAccount | null;
   busy: boolean;
   error: string | null;
   wrongChain: boolean;
@@ -33,6 +42,8 @@ export interface WalletContextValue {
   writeBlockedReason: string | null;
   connectInjected(): Promise<void>;
   connectDemo(): void;
+  /** After a Dynamic sign-in: connects its embedded wallet (created on a first sign-in); throws on failure. */
+  connectEmbedded(): Promise<void>;
   disconnect(): void;
   ensureChain(): Promise<void>;
   /** Client for the SDK's typed-data signing. */
@@ -60,10 +71,19 @@ function hasErrorCode(err: unknown, code: number): boolean {
   return false;
 }
 
+const hasEmbedded = dynamicEnvironmentId() !== null;
+
+interface EmbeddedWallet {
+  account: WalletAccount;
+  /** Created asynchronously by Dynamic, so it is held in state, unlike the other two clients. */
+  client: ConnectedWalletClient;
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { info, rpcUrl } = useNetwork();
   const provider = typeof window !== "undefined" ? window.ethereum : undefined;
   const [kind, setKind] = useState<WalletKind | null>(null);
+  const [embedded, setEmbedded] = useState<EmbeddedWallet | null>(null);
   const [injectedAddress, setInjectedAddress] = useState<Address | null>(null);
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [demoKey, setDemoKey] = useState<Hex | null>(storedDemoKey);
@@ -88,6 +108,56 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .catch(() => undefined);
     }
   }, [provider]);
+
+  const connectEmbedded = useCallback(async () => {
+    const d = await loadDynamic();
+    const account = await d.ensureEmbeddedAccount();
+    const client = await d.embeddedWalletClient(account);
+    setEmbedded({ account, client });
+    setKind("embedded");
+    setError(null);
+    writeStorage(KIND_KEY, "embedded");
+  }, []);
+
+  // A stored email or passkey connection comes back without prompting while its Dynamic session lasts.
+  useEffect(() => {
+    if (readStorage(KIND_KEY) !== "embedded") return;
+    if (!hasEmbedded) {
+      writeStorage(KIND_KEY, null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const d = await loadDynamic();
+      await d.ready();
+      if (cancelled) return;
+      if (d.signedIn()) await connectEmbedded();
+      else writeStorage(KIND_KEY, null);
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [connectEmbedded]);
+
+  // The Dynamic session ended elsewhere (expiry, a logout in another tab): the embedded wallet disconnects.
+  useEffect(() => {
+    if (kind !== "embedded") return;
+    let off: (() => void) | undefined;
+    let cancelled = false;
+    void loadDynamic().then((d) => {
+      if (cancelled) return;
+      off = d.onDynamic("userChanged", ({ user }) => {
+        if (user) return;
+        setKind((k) => (k === "embedded" ? null : k));
+        setEmbedded(null);
+        if (readStorage(KIND_KEY) === "embedded") writeStorage(KIND_KEY, null);
+      });
+    });
+    return () => {
+      cancelled = true;
+      off?.();
+    };
+  }, [kind]);
 
   useEffect(() => {
     if (!provider) return;
@@ -115,11 +185,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (kind === "injected" && injectedAddress && provider) {
       return createWalletClient({ account: injectedAddress, chain: info.chain, transport: custom(provider) });
     }
+    if (kind === "embedded" && embedded) return embedded.client;
     return null;
-  }, [kind, demoAccount, injectedAddress, provider, info, rpcUrl]);
+  }, [kind, demoAccount, injectedAddress, provider, info, rpcUrl, embedded]);
 
   const address: Address | null =
-    kind === "demo" ? (demoAccount?.address ?? null) : kind === "injected" ? injectedAddress : null;
+    kind === "demo"
+      ? (demoAccount?.address ?? null)
+      : kind === "injected"
+        ? injectedAddress
+        : kind === "embedded" && embedded
+          ? getAddress(embedded.account.address)
+          : null;
 
   const wrongChain = kind === "injected" && walletChainId !== null && walletChainId !== info.chain.id;
 
@@ -128,7 +205,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ? "Connect a wallet first."
     : kind === "injected" && info.isFork
       ? `${info.label} is a local fork that reuses chain id ${info.chain.id}, so a browser wallet would send to the real chain. Use the demo wallet here.`
-      : null;
+      : kind === "embedded" && info.isFork
+        ? `${info.label} is a scenario fork that reuses Monad mainnet's chain id ${info.chain.id}. Your email or passkey wallet is a real wallet, so Selio does not let it sign there. Use the demo wallet on scenario forks.`
+        : null;
 
   const connectInjected = useCallback(async () => {
     setError(null);
@@ -166,14 +245,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     writeStorage(KIND_KEY, "demo");
   }, []);
 
-  // The demo key stays in storage, so reconnecting the demo wallet returns the same address.
+  // The demo key stays in storage, so reconnecting the demo wallet returns the same address. The email or
+  // passkey wallet also signs out of Dynamic, so a shared computer keeps no session.
   const disconnect = useCallback(() => {
     setKind(null);
     setError(null);
     writeStorage(KIND_KEY, null);
-  }, []);
+    if (kind === "embedded") {
+      setEmbedded(null);
+      void loadDynamic()
+        .then((d) => d.logout())
+        .catch(() => undefined);
+    }
+  }, [kind]);
 
   const ensureChain = useCallback(async () => {
+    if (kind === "embedded") {
+      if (embedded && info.key === "monad-testnet") await (await loadDynamic()).switchToTestnet(embedded.account);
+      return;
+    }
     if (kind !== "injected" || !walletClient) return;
     const current = await walletClient.getChainId();
     if (current !== info.chain.id) {
@@ -186,7 +276,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
     setWalletChainId(info.chain.id);
-  }, [kind, walletClient, info, rpcUrl]);
+  }, [kind, walletClient, info, rpcUrl, embedded]);
 
   const typedDataSigner = useCallback((): WalletClient | null => {
     if (!walletClient) return null;
@@ -214,12 +304,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     address,
     walletClient,
     hasInjected: !!provider,
+    hasEmbedded,
+    embeddedAccount: kind === "embedded" ? (embedded?.account ?? null) : null,
     busy,
     error,
     wrongChain,
     writeBlockedReason,
     connectInjected,
     connectDemo,
+    connectEmbedded,
     disconnect,
     ensureChain,
     typedDataSigner,

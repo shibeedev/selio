@@ -32,3 +32,21 @@ export function rpcUrlFor(key: NetworkKey): string {
 export function apiBaseUrl(): string {
   return resolveApiUrl(import.meta.env);
 }
+
+/** Dynamic environment of the embedded wallet; null when the build has none (the option then says so). */
+export function resolveDynamicEnvironmentId(env: EnvLike): string | null {
+  return envString(env, "VITE_DYNAMIC_ENVIRONMENT_ID");
+}
+
+/** Base URL of the exit agent service, without trailing slashes; null when the build has none. */
+export function resolveAgentUrl(env: EnvLike): string | null {
+  return envString(env, "VITE_AGENT_URL")?.replace(/\/+$/, "") ?? null;
+}
+
+export function dynamicEnvironmentId(): string | null {
+  return resolveDynamicEnvironmentId(import.meta.env);
+}
+
+export function agentBaseUrl(): string | null {
+  return resolveAgentUrl(import.meta.env);
+}
