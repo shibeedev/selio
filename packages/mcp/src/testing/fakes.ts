@@ -124,6 +124,7 @@ export function fakeNetwork(deployment: Deployment): FakeNetwork {
     morphoNonce: vi.fn<ChainReads["morphoNonce"]>(async () => 0n),
     morphoLiquidity: vi.fn<ChainReads["morphoLiquidity"]>(async () => ({ adapter: zeroAddress, data: "0x" })),
     latestTimestamp: vi.fn<ChainReads["latestTimestamp"]>(async () => 1_700_000_000n),
+    blockNumber: vi.fn<ChainReads["blockNumber"]>(async () => 1_000_000n),
     call: vi.fn<ChainReads["call"]>(async () => ({ ok: true, returnData: "0x" })),
   };
   return { handle: { info: NETWORKS[deployment.network], deployment, sdk, reads }, sdk, reads };

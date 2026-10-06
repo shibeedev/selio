@@ -8,6 +8,7 @@ import type { ChainLayerOptions } from "./config.js";
 import { errorMessage } from "./errors.js";
 import * as build from "./tools/build.js";
 import type { ToolContext } from "./tools/common.js";
+import * as history from "./tools/history.js";
 import * as read from "./tools/read.js";
 import * as sim from "./tools/simulate.js";
 
@@ -25,7 +26,8 @@ const INSTRUCTIONS = `Selio is an exit market for frozen lending pools on Monad 
 Depositors stuck in a ~100%-utilized pool sell their deposit receipts to same-asset borrowers (who repay debt at a discount in the same transaction), to escrowed limit bids, or to the Selio Vault.
 This server only reads on-chain data, simulates, and builds UNSIGNED transactions. It never holds keys and never signs: hand every transaction to the user's wallet.
 Amounts are human decimal strings in token units (for example "1.5"); outputs give both raw base units and human values. Discounts are basis points (100 = 1%).
-Typical flows: stuck depositor -> get_exit_capacity, plan_sell_now, build_sell_now or build_open_session. Borrower -> get_borrower_position, list_sessions, quote_purchase, build_buy_and_repay or build_buy_with_collateral. Discount buyer -> list_bids, build_place_bid or build_vault_deposit. Always simulate_transaction before sending.`;
+Typical flows: stuck depositor -> get_exit_capacity, plan_sell_now, build_sell_now or build_open_session. Borrower -> get_borrower_position, list_sessions, quote_purchase, build_buy_and_repay or build_buy_with_collateral. Discount buyer -> list_bids, build_place_bid or build_vault_deposit. Always simulate_transaction before sending.
+Past activity (fills with fees, auctions, bid depth, exit capacity over time, Selio Vault recoveries, a wallet's history) -> get_history; it covers monad-testnet only and is for display, so re-read current state on-chain before acting.`;
 
 const READ = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -34,6 +36,8 @@ export interface SelioMcpOptions extends ChainLayerOptions {
   chain?: SelioChain;
   /** Most chain reads one Streamable HTTP request may make, across all its tool calls. Unset: no bound. */
   maxReadsPerRequest?: number;
+  /** GraphQL endpoint of the Selio event index (Envio HyperIndex) that get_history reads. Unset: get_history is refused. */
+  indexerUrl?: string;
 }
 
 const toText = (value: unknown): string =>
@@ -50,7 +54,7 @@ export async function runTool(fn: () => Promise<unknown>): Promise<CallToolResul
 
 /** Creates an MCP server exposing Selio's read, plan, build and simulate tools. */
 export function createSelioMcpServer(options: SelioMcpOptions = {}): McpServer {
-  const ctx: ToolContext = { chain: options.chain ?? createChainLayer(options) };
+  const ctx: ToolContext = { chain: options.chain ?? createChainLayer(options), indexerUrl: options.indexerUrl };
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: INSTRUCTIONS });
 
   server.registerTool(
@@ -250,6 +254,17 @@ export function createSelioMcpServer(options: SelioMcpOptions = {}): McpServer {
       annotations: READ,
     },
     (args) => runTool(() => sim.simulateTransaction(ctx, args)),
+  );
+  server.registerTool(
+    "get_history",
+    {
+      title: "Get market history",
+      description:
+        "Past activity of the Selio market on monad-testnet, from the Selio event index (Envio HyperIndex): fills with the 0.2% fee and the seller's net, Dutch auctions with their discount schedule and fills, limit bids and how they filled, exit capacity and bid depth over time, the Selio Vault's purchases and recoveries, or one wallet's sales, bids and totals. For display and research only: before building any transaction, read current state with get_exit_capacity, list_sessions, list_bids or quote_purchase.",
+      inputSchema: history.getHistoryShape,
+      annotations: READ,
+    },
+    (args) => runTool(() => history.getHistory(ctx, args)),
   );
 
   return server;

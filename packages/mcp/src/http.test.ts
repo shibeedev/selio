@@ -83,9 +83,10 @@ describe("Streamable HTTP", () => {
       expect(list.status).toBe(200);
       const { result } = (await list.json()) as { result: { tools: { name: string }[] } };
       const names = result.tools.map((t) => t.name);
-      expect(names).toHaveLength(18);
+      expect(names).toHaveLength(19);
       expect(names).toContain("build_buy_and_repay");
       expect(names).toContain("simulate_transaction");
+      expect(names.at(-1)).toBe("get_history");
     });
   });
 

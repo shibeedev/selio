@@ -75,6 +75,8 @@ export interface ChainReads {
   /** The Earn vault's liquidity adapter and liquidity data: plain vault withdrawals are served from that market. */
   morphoLiquidity(): Promise<{ adapter: Address; data: Hex }>;
   latestTimestamp(): Promise<bigint>;
+  /** The chain head's block number. */
+  blockNumber(): Promise<bigint>;
   call(tx: { from: Address; to: Address; data: Hex; value: bigint }): Promise<CallOutcome>;
 }
 
@@ -168,6 +170,10 @@ class RpcReads implements ChainReads {
 
   async latestTimestamp(): Promise<bigint> {
     return (await this.client.getBlock()).timestamp;
+  }
+
+  blockNumber(): Promise<bigint> {
+    return this.client.getBlockNumber();
   }
 
   async call(tx: { from: Address; to: Address; data: Hex; value: bigint }): Promise<CallOutcome> {

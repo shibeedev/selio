@@ -38,6 +38,19 @@ describe("loadMcpConfig", () => {
     );
   });
 
+  it("reads SELIO_INDEXER_URL, counting an empty value as unset, and rejects one that is not a URL", () => {
+    const url = "https://indexer.dev.hyperindex.xyz/abc123/v1/graphql";
+    expect(loadMcpConfig({ SELIO_INDEXER_URL: url }).indexerUrl).toBe(url);
+    expect(loadMcpConfig({ SELIO_INDEXER_URL: "" })).not.toHaveProperty("indexerUrl");
+    expect(loadMcpConfig({})).not.toHaveProperty("indexerUrl");
+    expect(() => loadMcpConfig({ SELIO_INDEXER_URL: "indexer.dev.hyperindex.xyz" })).toThrow(
+      "Invalid configuration: SELIO_INDEXER_URL: must be a URL",
+    );
+    expect(() => loadMcpConfig({ SELIO_RPC_VAULT_FREEZE: "nope", SELIO_INDEXER_URL: "nope" })).toThrow(
+      "Invalid configuration: SELIO_RPC_VAULT_FREEZE: must be a URL; SELIO_INDEXER_URL: must be a URL",
+    );
+  });
+
   it("names the variables after the network keys", () => {
     expect(envSuffix("usdt0-replay")).toBe("USDT0_REPLAY");
     expect(NETWORK_KEYS.map(envSuffix)).toEqual(["MONAD_TESTNET", "USDT0_REPLAY", "VAULT_FREEZE"]);

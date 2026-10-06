@@ -8,6 +8,8 @@ export interface ToolContext {
   chain: SelioChain;
   /** Wall-clock time in seconds; injectable for tests. */
   nowSeconds?: () => bigint;
+  /** GraphQL endpoint of the Selio event index, read by get_history. */
+  indexerUrl?: string;
 }
 
 export interface TxView {

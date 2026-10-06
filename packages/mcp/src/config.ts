@@ -29,8 +29,13 @@ function isUrl(value: string): boolean {
   }
 }
 
-/** Reads SELIO_DEPLOYMENTS_DIR and SELIO_RPC_<KEY>; throws when an RPC value is not a URL. */
-export function loadMcpConfig(env: NodeJS.ProcessEnv = process.env): Required<ChainLayerOptions> {
+/**
+ * Reads SELIO_DEPLOYMENTS_DIR, SELIO_RPC_<KEY> and SELIO_INDEXER_URL (the event index get_history reads); throws when
+ * an RPC value or the indexer URL is not a URL.
+ */
+export function loadMcpConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): Required<ChainLayerOptions> & { indexerUrl?: string } {
   const rpcUrls: Partial<Record<NetworkKey, string>> = {};
   const problems: string[] = [];
   for (const key of NETWORK_KEYS) {
@@ -40,6 +45,12 @@ export function loadMcpConfig(env: NodeJS.ProcessEnv = process.env): Required<Ch
     if (isUrl(url)) rpcUrls[key] = url;
     else problems.push(`${name}: must be a URL`);
   }
+  const indexerUrl = env.SELIO_INDEXER_URL;
+  if (indexerUrl && !isUrl(indexerUrl)) problems.push("SELIO_INDEXER_URL: must be a URL");
   if (problems.length > 0) throw new Error(`Invalid configuration: ${problems.join("; ")}`);
-  return { deploymentsDir: env.SELIO_DEPLOYMENTS_DIR || defaultDeploymentsDir(), rpcUrls };
+  return {
+    deploymentsDir: env.SELIO_DEPLOYMENTS_DIR || defaultDeploymentsDir(),
+    rpcUrls,
+    ...(indexerUrl ? { indexerUrl } : {}),
+  };
 }
