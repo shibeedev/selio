@@ -1,0 +1,36 @@
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+script = "script"
+libs = ["lib"]
+via_ir = true
+optimizer = true
+optimizer_runs = 200
+bytecode_hash = "none"
+# Monad testnet and mainnet both execute TSTORE/TLOAD and MCOPY (checked with eth_call on 13 Oct 2026).
+evm_version = "cancun"
+fs_permissions = [{ access = "read-write", path = "./deployments" }, { access = "read", path = "./out" }]
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "vault-v2/=lib/vault-v2/src/",
+    "morpho-blue/=lib/vault-v2/lib/morpho-blue/src/",
+    "morpho-blue-irm/=lib/vault-v2/lib/morpho-blue-irm/src/",
+]
+
+[profile.default.fuzz]
+runs = 256
+
+[profile.default.invariant]
+runs = 64
+depth = 64
+fail_on_revert = false
+
+[rpc_endpoints]
+monad = "${MONAD_RPC}"
+monad_testnet = "${MONAD_TESTNET_RPC}"
+monad_archive = "${MONAD_ARCHIVE_RPC}"
+
+[lint]
+lint_on_build = false
