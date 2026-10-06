@@ -1,0 +1,171 @@
+import {
+  BaseError,
+  createPublicClient,
+  createWalletClient,
+  decodeErrorResult,
+  http,
+  maxUint256,
+  parseEventLogs,
+  type Abi,
+  type Address,
+  type Chain,
+  type Hex,
+  type PrivateKeyAccount,
+  type PublicClient,
+  type WalletClient,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import {
+  aaveCollateralRouteAbi,
+  aaveExitMarketAbi,
+  morphoVaultExitMarketAbi,
+  priceRouterAbi,
+  selioVaultAbi,
+  testTokenAbi,
+  type SelioClient,
+  type UnsignedTx,
+} from "@selio/sdk";
+import { check, type Recorder } from "./report.js";
+
+/** Private keys of anvil's default accounts #1-#9, in the order anvil prints them. */
+const TEST_KEYS: readonly Hex[] = [
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+  "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+  "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+  "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+  "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+  "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+  "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+  "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+];
+
+/** Same set as the web app: market, vault and route errors plus the price router's and the test token's. */
+const ERROR_ABIS: readonly Abi[] = [
+  aaveExitMarketAbi,
+  morphoVaultExitMarketAbi,
+  selioVaultAbi,
+  aaveCollateralRouteAbi,
+  priceRouterAbi,
+  testTokenAbi,
+];
+
+export interface Actor {
+  name: string;
+  account: PrivateKeyAccount;
+  address: Address;
+  wallet: WalletClient;
+}
+
+export function makeClients(rpcUrl: string, chain: Chain): { publicClient: PublicClient } {
+  const publicClient = createPublicClient({ chain, transport: http(rpcUrl, { timeout: 120_000 }) }) as PublicClient;
+  return { publicClient };
+}
+
+export function makeActors(names: string[], rpcUrl: string, chain: Chain, keys: readonly Hex[] = TEST_KEYS): Actor[] {
+  return names.map((name, i) => {
+    const key = keys[i];
+    if (!key) throw new Error(`no key for actor ${name}`);
+    const account = privateKeyToAccount(key);
+    const wallet = createWalletClient({ account, chain, transport: http(rpcUrl, { timeout: 120_000 }) });
+    return { name, account, address: account.address, wallet };
+  });
+}
+
+function revertData(e: unknown): Hex | undefined {
+  if (!(e instanceof BaseError)) return undefined;
+  const found = e.walk((err) => typeof (err as { data?: unknown }).data === "string") as { data?: Hex } | null;
+  return found?.data;
+}
+
+/** Decodes a revert into `ErrorName(arg, ...)`, or `revert <selector>` when no Selio ABI knows it. */
+export function explain(e: unknown): string {
+  const data = revertData(e);
+  if (data && data.length >= 10) {
+    for (const abi of ERROR_ABIS) {
+      try {
+        const { errorName, args } = decodeErrorResult({ abi, data });
+        return `${errorName}(${(args ?? []).map((a) => String(a)).join(", ")})`;
+      } catch {
+        // not an error of this ABI
+      }
+    }
+    return `revert ${data.slice(0, 10)}`;
+  }
+  if (e instanceof BaseError) return e.shortMessage;
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+/** Simulates, estimates, sends with a 30% gas buffer and waits for a successful receipt. */
+export async function send(
+  r: Recorder,
+  sdk: SelioClient,
+  actor: Actor,
+  tx: UnsignedTx,
+): Promise<{ hash: Hex; gasUsed: bigint }> {
+  try {
+    await sdk.simulate(tx, actor.address);
+  } catch (e) {
+    throw new Error(`simulation failed for "${tx.description}" from ${actor.name}: ${explain(e)}`);
+  }
+  const estimate = await sdk.client.estimateGas({ account: actor.address, to: tx.to, data: tx.data, value: tx.value });
+  // Execution can take costlier branches than the estimate saw (e.g. Aave disabling collateral).
+  const hash = await actor.wallet.sendTransaction({
+    account: actor.account,
+    chain: actor.wallet.chain,
+    to: tx.to,
+    data: tx.data,
+    value: tx.value,
+    gas: (estimate * 13n) / 10n,
+  });
+  r.noteTx(hash);
+  const receipt = await sdk.client.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new Error(`tx reverted: ${tx.description} (${hash})`);
+  return { hash, gasUsed: receipt.gasUsed };
+}
+
+/** Approves `spender` for an unlimited amount when the current allowance is below `amount`. */
+export async function ensureAllowance(
+  r: Recorder,
+  sdk: SelioClient,
+  actor: Actor,
+  token: Address,
+  spender: Address,
+  amount: bigint,
+): Promise<void> {
+  if ((await sdk.allowance(token, actor.address, spender)) >= amount) return;
+  await send(r, sdk, actor, sdk.approve(token, spender, maxUint256));
+}
+
+/**
+ * Totals of the fills a transaction made on the market (its `BidFilled` and `Bought` events), after checking that
+ * each fill's fee is its payment times `FEE_BPS` / 10,000, rounded down.
+ */
+export async function fillTotals(
+  sdk: SelioClient,
+  hash: Hex,
+): Promise<{ count: number; assets: bigint; paid: bigint; fee: bigint }> {
+  const receipt = await sdk.client.getTransactionReceipt({ hash });
+  const logs = receipt.logs.filter((l) => l.address.toLowerCase() === sdk.market.toLowerCase());
+  const events = parseEventLogs({ abi: aaveExitMarketAbi, logs, eventName: ["BidFilled", "Bought"] });
+  const feeBps = BigInt(await sdk.feeBps());
+  const totals = { count: events.length, assets: 0n, paid: 0n, fee: 0n };
+  for (const { args } of events) {
+    check(args.fee === (args.paid * feeBps) / 10_000n, `fee rounding: ${args.fee} on ${args.paid}`);
+    totals.assets += args.assets;
+    totals.paid += args.paid;
+    totals.fee += args.fee;
+  }
+  return totals;
+}
+
+/** Simulates `tx` and returns the decoded revert reason; throws when the call succeeds. Never sends. */
+export async function expectRevert(sdk: SelioClient, actor: Actor, tx: UnsignedTx): Promise<string> {
+  try {
+    await sdk.simulate(tx, actor.address);
+  } catch (e) {
+    return explain(e);
+  }
+  throw new Error(`expected "${tx.description}" to revert`);
+}
