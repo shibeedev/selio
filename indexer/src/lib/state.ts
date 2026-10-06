@@ -55,7 +55,7 @@ export function rowOf<E>(rows: Map<string, E>, id: string): E {
   return row;
 }
 
-export const newAccount = (id: string, timestamp: number): Account => ({
+const newAccount = (id: string, timestamp: number): Account => ({
   id,
   receiptShares: 0n,
   vaultShares: 0n,
@@ -101,7 +101,7 @@ export async function loadFeeTotal(context: Context, payToken: string): Promise<
   return { ...(row ?? { id, market_id: DEPLOYMENT.market, payToken, fees: 0n, gross: 0n, sellerNet: 0n, fillCount: 0 }) };
 }
 
-export const newMarket = (timestamp: number): Market => ({
+const newMarket = (timestamp: number): Market => ({
   id: DEPLOYMENT.market,
   chainId: DEPLOYMENT.chainId,
   receipt: DEPLOYMENT.earnVault,
