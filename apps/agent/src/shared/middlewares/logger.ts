@@ -1,4 +1,4 @@
-import { pino, type Logger as PinoLogger } from "pino";
+import { pino, type DestinationStream, type Logger as PinoLogger } from "pino";
 import { pinoHttp } from "pino-http";
 
 export type Logger = PinoLogger;
@@ -12,8 +12,8 @@ const REDACT = [
   'res.headers["x-dynamic-response-signature"]',
 ];
 
-export function createLogger({ nodeId, level }: { nodeId: string; level: string }): Logger {
-  return pino({ level, base: { nodeId }, redact: REDACT });
+export function createLogger({ nodeId, level }: { nodeId: string; level: string }, destination?: DestinationStream): Logger {
+  return pino({ level, base: { nodeId }, redact: REDACT }, destination);
 }
 
 export function httpLogger(logger: Logger) {

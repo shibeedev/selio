@@ -7,6 +7,7 @@ import { DelegationRepository } from "./modules/delegations/index.js";
 import { ActionRepository, type ExecutorService } from "./modules/executor/index.js";
 import { GrantRepository } from "./modules/grants/index.js";
 import type { Db } from "./shared/db/database.js";
+import { createLogger } from "./shared/middlewares/logger.js";
 import { createTokenVerifier } from "./shared/middlewares/requireDynamicUser.js";
 import {
   DYNAMIC_SECRET,
@@ -598,6 +599,60 @@ describe("not configured state", () => {
   it("is ready once Dynamic is configured", async () => {
     build();
     expect((await request(app).get("/readyz")).body).toEqual({ status: "ready" });
+  });
+});
+
+describe("logs", () => {
+  it("never contain the JWT, webhook or review signatures, the response signature or delegated materials", async () => {
+    const lines: string[] = [];
+    build({ logger: createLogger({ nodeId: "test", level: "info" }, { write: (line: string) => void lines.push(line) }) });
+    const bearer = await token();
+    const created = JSON.stringify({
+      eventId: "evt-1",
+      eventName: "wallet.delegation.created",
+      timestamp: new Date(NOW - 1_000).toISOString(),
+      environmentId: ENVIRONMENT_ID,
+      data: {
+        chain: "EVM",
+        walletId: WALLET_ID,
+        userId: USER_ID,
+        publicKey: WALLET,
+        encryptedDelegatedShare: envelopeOf(JSON.stringify(KEY_SHARE)),
+        encryptedWalletApiKey: envelopeOf(WALLET_API_KEY),
+      },
+    });
+    const eventSignature = `sha256=${hmac(DYNAMIC_SECRET, created)}`;
+    await request(app).post("/dynamic/webhooks").set("Content-Type", "application/json").set("x-dynamic-signature-256", eventSignature).send(created);
+    await request(app).get("/agent/v1/me").set("Authorization", `Bearer ${bearer}`);
+    const grant = seedGrant(db, { kind: "vault" });
+    chain.setBalance(USDC, WALLET, 500_000_000n);
+    chain.setAllowance(USDC, WALLET, VAULT, 500_000_000n);
+    const alertBody = JSON.stringify({ type: "selio.capacity.alert", network: "monad-testnet", utilizationBps: 9_950, thresholdBps: 9_000, withdrawable: "0", supplied: "1", at: 7 });
+    const alertSignature = `sha256=${hmac(SELIO_SECRET, alertBody)}`;
+    await request(app).post(`/hooks/alert/${grant.id}`).set("Content-Type", "application/json").set("X-Selio-Signature", alertSignature).send(alertBody);
+    await executor.idle();
+    const reviewBody = JSON.stringify({ shareSetType: "rootUser", context: { evmMessage: "Sign in to Selio" } });
+    const reviewSignature = hmac(REVIEW_SECRET, reviewBody);
+    const reviewed = await request(app)
+      .post("/dynamic/transaction-review")
+      .set("Content-Type", "application/json")
+      .set("x-dynamic-signature", reviewSignature)
+      .send(reviewBody);
+    expect(chain.sent).toHaveLength(1);
+    const text = lines.join("\n");
+    expect(text).toContain("[Redacted]");
+    for (const secret of [
+      bearer,
+      eventSignature,
+      alertSignature,
+      reviewSignature,
+      String(reviewed.headers["x-dynamic-response-signature"]),
+      chain.sent[0]!,
+      WALLET_API_KEY,
+      "test-secret-share-material",
+    ]) {
+      expect(text).not.toContain(secret);
+    }
   });
 });
 
