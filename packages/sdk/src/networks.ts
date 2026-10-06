@@ -13,6 +13,8 @@ export interface NetworkInfo {
   venue: Venue;
   /** Fork scenarios run on a local or hosted fork node, not on the public chain. */
   isFork: boolean;
+  /** Selio's event index covers this network. */
+  indexed: boolean;
   defaultRpcUrl: string;
   explorerUrl?: string;
 }
@@ -25,6 +27,7 @@ export const NETWORKS: Record<NetworkKey, NetworkInfo> = {
     chain: monadTestnet,
     venue: "morpho",
     isFork: false,
+    indexed: true,
     defaultRpcUrl: "https://testnet-rpc.monad.xyz",
     explorerUrl: "https://testnet.monadscan.com",
   },
@@ -35,6 +38,7 @@ export const NETWORKS: Record<NetworkKey, NetworkInfo> = {
     chain: { ...monad, rpcUrls: { default: { http: ["http://127.0.0.1:8602"] } } },
     venue: "aave",
     isFork: true,
+    indexed: false,
     defaultRpcUrl: "http://127.0.0.1:8602",
   },
   "vault-freeze": {
@@ -44,6 +48,7 @@ export const NETWORKS: Record<NetworkKey, NetworkInfo> = {
     chain: { ...monad, rpcUrls: { default: { http: ["http://127.0.0.1:8604"] } } },
     venue: "morpho",
     isFork: true,
+    indexed: false,
     defaultRpcUrl: "http://127.0.0.1:8604",
   },
 };
