@@ -20,7 +20,16 @@ contract GuardsTest is MorphoBase {
         returns (SelioVault)
     {
         return new SelioVault(
-            "x", "x", IERC20(address(usdc)), markets, minD, maxShare, IERC4626(address(0)), ISourceProbe(address(0))
+            "x",
+            "x",
+            IERC20(address(usdc)),
+            markets,
+            minD,
+            maxShare,
+            IERC4626(address(0)),
+            ISourceProbe(address(0)),
+            _noKuru(markets.length),
+            5_000
         );
     }
 
@@ -206,6 +215,47 @@ contract GuardsTest is MorphoBase {
         uint16[] memory zeroShare = new uint16[](1);
         vm.expectRevert(SelioVault.BadParams.selector); // zero max share
         _vaultWith(one, oneMin, zeroShare);
+    }
+
+    function test_vault_kuruGuards() public {
+        ExitMarket[] memory one = new ExitMarket[](1);
+        one[0] = market;
+        uint16[] memory minD = new uint16[](1);
+        uint16[] memory maxShare = new uint16[](1);
+        maxShare[0] = 2_000;
+        // One Kuru leg per strategy, and at most the whole room on Kuru.
+        vm.expectRevert(SelioVault.BadParams.selector);
+        new SelioVault(
+            "x", "x", IERC20(address(usdc)), one, minD, maxShare, IERC4626(address(0)), ISourceProbe(address(0)), _noKuru(2), 0
+        );
+        vm.expectRevert(SelioVault.BadParams.selector);
+        new SelioVault(
+            "x",
+            "x",
+            IERC20(address(usdc)),
+            one,
+            minD,
+            maxShare,
+            IERC4626(address(0)),
+            ISourceProbe(address(0)),
+            _noKuru(1),
+            10_001
+        );
+        SelioVault ev = _vault();
+        vm.expectRevert(SelioVault.NotSelf.selector);
+        ev.kuruOp(0, 0, 0, 0);
+        vm.expectRevert(SelioVault.NotSelf.selector);
+        ev.kuruOp(1, 0, 970_000, 1e6);
+        vm.expectRevert(SelioVault.NothingToClaim.selector);
+        ev.claimKuru(0, address(this));
+        // A disabled leg reads as empty.
+        (address book,,, uint40 orderId,,, uint256 escrow,) = ev.kuruLeg(0);
+        assertEq(book, address(0));
+        assertEq(orderId, 0);
+        assertEq(escrow, 0);
+        (bool active,, uint256 refund, uint256 pending) = ev.kuruOrderState(0);
+        assertFalse(active);
+        assertEq(refund + pending, 0);
     }
 
     function test_vault_bidClosedByAFullFillIsHandled() public {

@@ -45,7 +45,13 @@ contract RouteAndVaultForkTest is AaveForkBase {
         minD[0] = 300;
         uint16[] memory maxShare = new uint16[](1);
         maxShare[0] = 2_000;
-        return new SelioVault("Selio Vault USDC", "slUSDC", IERC20(USDC), markets, minD, maxShare, source, probe);
+        return new SelioVault(
+            "Selio Vault USDC", "slUSDC", IERC20(USDC), markets, minD, maxShare, source, probe, _noKuru(), 5_000
+        );
+    }
+
+    function _noKuru() internal pure returns (SelioVault.KuruLeg[] memory) {
+        return new SelioVault.KuruLeg[](1);
     }
 
     /// @dev Borrower posted 50 USDC and borrowed B AUSD, seller holds 100 aMonUSDC, then the USDC pool froze to 0.
@@ -236,7 +242,7 @@ contract RouteAndVaultForkTest is AaveForkBase {
         uint16[] memory maxShare = new uint16[](1);
         maxShare[0] = 2_000;
         vm.expectRevert(SelioVault.BadParams.selector);
-        new SelioVault("x", "x", IERC20(USDC), markets, minD, maxShare, IERC4626(STATIC_A_USDC), probe);
+        new SelioVault("x", "x", IERC20(USDC), markets, minD, maxShare, IERC4626(STATIC_A_USDC), probe, _noKuru(), 5_000);
     }
 
     function test_fork_vault_staticATokenSource_depositAndRedeem() public {

@@ -138,7 +138,16 @@ contract SelioVaultMorphoTest is MorphoBase {
         maxShare[0] = 2_000;
         vm.expectRevert(SelioVault.BadParams.selector);
         new SelioVault(
-            "x", "x", IERC20(address(ausd)), markets, minD, maxShare, IERC4626(address(0)), ISourceProbe(address(0))
+            "x",
+            "x",
+            IERC20(address(ausd)),
+            markets,
+            minD,
+            maxShare,
+            IERC4626(address(0)),
+            ISourceProbe(address(0)),
+            _noKuru(1),
+            5_000
         );
     }
 

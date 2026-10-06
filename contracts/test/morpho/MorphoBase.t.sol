@@ -96,7 +96,14 @@ abstract contract MorphoBase is Test, MorphoStack {
         minD[0] = 300;
         uint16[] memory maxShare = new uint16[](1);
         maxShare[0] = 2_000;
-        return new SelioVault("Selio Vault USDC", "slUSDC", IERC20(address(usdc)), markets, minD, maxShare, source, probe);
+        return new SelioVault(
+            "Selio Vault USDC", "slUSDC", IERC20(address(usdc)), markets, minD, maxShare, source, probe, _noKuru(1), 5_000
+        );
+    }
+
+    /// @dev `n` disabled Kuru legs.
+    function _noKuru(uint256 n) internal pure returns (SelioVault.KuruLeg[] memory) {
+        return new SelioVault.KuruLeg[](n);
     }
 
     function _pair(address a, address b) internal pure returns (address[] memory r) {
