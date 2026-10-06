@@ -3,9 +3,9 @@ import { isAddressEqual, zeroAddress } from "viem";
 import { aaveExitMarketAbi, type BidView, type SelioClient } from "@selio/sdk";
 import { AmountField } from "../../components/AmountField";
 import { DemoFunds } from "../../components/DemoFunds";
-import { Chip, Notice, Stat, StatusChip, SummaryRow, ToggleGroup } from "../../components/ui";
+import { Chip, Notice, Stat, SummaryRow, ToggleGroup } from "../../components/ui";
 import { TxStatus } from "../../components/TxStatus";
-import { baseYieldRows, baseYieldRule, sourceInKindText, yieldSourceOf } from "../../lib/base-yield";
+import { baseYieldRows, baseYieldRule, sourceInKindText, sourceState, yieldSourceOf } from "../../lib/base-yield";
 import { describeError } from "../../lib/errors";
 import { formatAmount, formatBps, formatShare, formatToken, parseAmountInput, toInputString } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
@@ -171,16 +171,18 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
           <Stat label="Total" testid="vault-total" value={state ? formatToken(state.totalAssets, asset) : "…"} />
         </div>
         {source && (
-          <div className="stats stats--yield">
-            {yieldRows.map((row) => (
-              <Stat
-                key={row.testid}
-                label={row.label}
-                testid={row.testid}
-                value={row.value}
-                sub={row.testid === "vault-source-utilization" ? <StatusChip utilizationBps={source.utilizationBps} /> : undefined}
-              />
-            ))}
+          <div className="yield-block stack-sm">
+            <div className="panel-head">
+              <span className="label">Base yield</span>
+              <Chip tone={sourceState(source).tone} testid="vault-source-state">
+                {sourceState(source).text}
+              </Chip>
+            </div>
+            <div className="stats stats--yield">
+              {yieldRows.map((row) => (
+                <Stat key={row.testid} label={row.label} testid={row.testid} value={row.value} />
+              ))}
+            </div>
           </div>
         )}
         <ul className="rules">

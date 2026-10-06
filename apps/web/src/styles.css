@@ -192,6 +192,10 @@ p {
   align-items: center;
 }
 
+.row-sm--nowrap {
+  flex-wrap: nowrap;
+}
+
 .split {
   display: flex;
   flex-wrap: wrap;
@@ -274,7 +278,7 @@ p {
   font-weight: 700;
   line-height: 1.04;
   letter-spacing: -0.022em;
-  max-width: 15ch;
+  max-width: 20ch;
   background: linear-gradient(180deg, #ffffff 35%, #cdbaff 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -960,9 +964,15 @@ p {
   background: rgba(255, 255, 255, 0.035);
 }
 
-.stats--yield .stat {
+.yield-block {
+  padding: 12px 14px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(167, 139, 250, 0.2);
   background: var(--accent-soft-2);
-  border-color: rgba(167, 139, 250, 0.2);
+}
+
+.stats--yield .stat {
+  background: rgba(0, 0, 0, 0.22);
 }
 
 .stat-label {
@@ -995,8 +1005,9 @@ p {
 
 .summary-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 2px 12px;
 }
 
 .summary-label {
@@ -1004,6 +1015,7 @@ p {
 }
 
 .summary-value {
+  margin-left: auto;
   text-align: right;
   overflow-wrap: anywhere;
 }
@@ -1256,6 +1268,7 @@ p {
 }
 
 .choice--card {
+  flex: none;
   width: 100%;
   padding: 16px 18px;
   cursor: default;
@@ -1433,6 +1446,11 @@ p {
 
 .data td.mono {
   font-size: 13.5px;
+}
+
+.data--wide td.mono,
+.levels > span {
+  white-space: nowrap;
 }
 
 .row-selected {

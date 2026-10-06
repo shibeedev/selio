@@ -56,6 +56,14 @@ export function sourceIsTight(source: BaseYieldSource): boolean {
   return source.utilizationBps >= SOURCE_MAX_UTILIZATION_BPS;
 }
 
+/** What the vault is doing with its waiting capital, for the panel's status chip. */
+export function sourceState(source: BaseYieldSource): { tone: "open" | "tight"; text: string } {
+  const at = formatBps(source.utilizationBps);
+  if (!sourceIsTight(source)) return { tone: "open", text: `Earning: source at ${at}` };
+  if (source.assets === 0n) return { tone: "tight", text: `Pulled back: source at ${at}` };
+  return { tone: "tight", text: `Source at ${at}: no new deposits, and anyone can pull the rest back to cash` };
+}
+
 /** The redemption preview's in-kind source part: source shares the source cannot pay out now. */
 export function sourceInKindText(shares: bigint, sourceToken: TokenInfo | null): string | null {
   if (shares === 0n || !sourceToken) return null;

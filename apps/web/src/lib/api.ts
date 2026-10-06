@@ -56,10 +56,10 @@ const list = (v: unknown): Body[] =>
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
 /**
- * The backend waits up to 60 s for a running kit on the same fork and then runs its own kit, about a
- * minute on a slow fork, so the faucet call gets more than both before it gives up.
+ * The backend waits up to 60 s for a running kit on the same fork and then runs its own kit (120 s for a
+ * first seller kit on a cold fork), so the faucet call gets more than both before it gives up.
  */
-export const FAUCET_TIMEOUT_MS = 150_000;
+export const FAUCET_TIMEOUT_MS = 200_000;
 
 interface RequestOptions {
   timeoutMs?: number;
@@ -171,8 +171,8 @@ export async function requestDemoFunds(network: string, address: string, kit: Fa
     { method: "POST", body: JSON.stringify({ network, address, kit }) },
     {
       timeoutMs: FAUCET_TIMEOUT_MS,
-      timeoutMessage:
-        "The kit is still running on the fork. Check your balances in a minute instead of asking again; a repeat request counts against the 10-minute limit.",
+      // The UI test reads /fail|error|limit/i as a failed kit, and this one is still running.
+      timeoutMessage: "The kit is still running on the fork. Check your balances in a minute instead of asking again.",
     },
   );
   if (body.ok !== true) throw new ApiError("The faucet did not confirm the transfer.", false);

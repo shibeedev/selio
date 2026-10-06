@@ -70,7 +70,7 @@ export function CapacityTable({ meta, capacity }: { meta: MarketMeta; capacity: 
                 <StatusChip utilizationBps={cap.utilizationBps} testid="capacity-status" />
               </td>
               <td>
-                <div className="row-sm">
+                <div className="row-sm row-sm--nowrap">
                   <a className="btn btn--primary btn--small" href={hrefFor("sell")} data-testid="capacity-action-sell">
                     Sell
                   </a>
