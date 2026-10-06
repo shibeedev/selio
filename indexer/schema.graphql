@@ -1,0 +1,374 @@
+# Addresses are lowercase hex. Amounts are BigInt in base units of their token (the underlying USDC
+# for receipt values; the pay token for payments, escrow and fees). Basis points, block numbers,
+# log indexes and Unix timestamps (seconds, block time) are Int.
+
+enum FillKind { BORROWER_WALLET BORROWER_COLLATERAL SELL_NOW AUCTION_MATCH }
+enum BidStatus { LIVE CANCELLED CLOSED_AFTER_FILL }
+enum Interval { HOUR DAY }
+enum VaultActionKind {
+  DEPOSIT REDEEM RECOVER DEFER CLAIM
+  SOURCE_DEPOSIT SOURCE_WITHDRAW SOURCE_PULL SOURCE_IN_KIND
+}
+enum PoolEventKind {
+  VAULT_DEPOSIT VAULT_WITHDRAW VAULT_ALLOCATE VAULT_DEALLOCATE VAULT_FORCE_DEALLOCATE
+  MARKET_SUPPLY MARKET_WITHDRAW MARKET_BORROW MARKET_REPAY MARKET_LIQUIDATE
+}
+enum MorphoMarketRole { EARN FLASH }
+
+# One per Selio market (one on Monad testnet). id = market address.
+type Market {
+  id: ID!
+  chainId: Int!
+  receipt: String!
+  underlying: String!
+  selioVault: String!
+  sessionsOpened: Int!
+  bidsPlaced: Int!
+  liveBids: Int!
+  inexactLiveBids: Int!
+  fillCount: Int!
+  filledAssets: BigInt!
+  borrowerFilledAssets: BigInt!
+  bidFilledAssets: BigInt!
+  debtRepaid: BigInt!
+  redeemedAssets: BigInt!
+  sessionAssets: BigInt!
+  bidAt100: BigInt!
+  bidAt300: BigInt!
+  bidAt500: BigInt!
+  bidAt1000: BigInt!
+  bidAt2000: BigInt!
+  updatedAt: Int!
+  sessions: [Session!]! @derivedFrom(field: "market")
+  bids: [Bid!]! @derivedFrom(field: "market")
+  fills: [Fill!]! @derivedFrom(field: "market")
+  fees: [FeeTotal!]! @derivedFrom(field: "market")
+  redemptions: [Redemption!]! @derivedFrom(field: "market")
+  intervals: [MarketInterval!]! @derivedFrom(field: "market")
+  capacity: [CapacityPoint!]! @derivedFrom(field: "market")
+}
+
+# Dutch auction. id = "{market}-{sessionId}".
+type Session {
+  id: ID!
+  market: Market!
+  sessionId: BigInt!
+  seller: Account!
+  openedAssets: BigInt!
+  openedUnits: BigInt!
+  startBps: Int!
+  stepBps: Int!
+  stepInterval: Int!
+  capBps: Int!
+  duration: Int!
+  payMask: Int!
+  startedAt: Int! @index
+  endsAt: Int!
+  openedBlock: Int!
+  openedTx: String!
+  soldAssets: BigInt!
+  fillCount: Int!
+  discountWeighted: BigInt!
+  avgDiscountBps: Int
+  withdrawnAssets: BigInt!
+  withdrawnUnits: BigInt!
+  listedAssets: BigInt!
+  lastActivityAt: Int!
+  fills: [Fill!]! @derivedFrom(field: "session")
+}
+
+# Escrowed limit bid. id = "{market}-{bidId}".
+type Bid {
+  id: ID!
+  market: Market!
+  bidId: BigInt!
+  bidder: Account!
+  isSelioVault: Boolean!
+  minDiscountBps: Int!
+  payToken: String!
+  payIsUnderlying: Boolean!
+  maxAssetsPlaced: BigInt!
+  escrowPlaced: BigInt!
+  maxAssets: BigInt!
+  escrow: BigInt!
+  capacityAssets: BigInt!
+  capacityExact: Boolean!
+  filledAssets: BigInt!
+  paidOut: BigInt!
+  fillCount: Int!
+  resizeCount: Int!
+  status: BidStatus!
+  placedAt: Int! @index
+  placedBlock: Int!
+  placedTx: String!
+  closedAt: Int
+  refunded: BigInt
+  lastFillTx: String
+  fills: [Fill!]! @derivedFrom(field: "bid")
+  resizes: [BidResize!]! @derivedFrom(field: "bid")
+}
+
+# One per BidResized log. id = "{blockNumber}-{logIndex}".
+type BidResize {
+  id: ID!
+  bid: Bid!
+  maxAssetsBefore: BigInt!
+  escrowBefore: BigInt!
+  maxAssets: BigInt!
+  escrow: BigInt!
+  timestamp: Int!
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+}
+
+# One per Bought or BidFilled log. id = "{blockNumber}-{logIndex}".
+type Fill {
+  id: ID!
+  market: Market!
+  kind: FillKind!
+  session: Session
+  sessionId: BigInt!
+  bid: Bid
+  bidId: BigInt
+  seller: Account!
+  buyer: Account!
+  buyerIsSelioVault: Boolean!
+  assets: BigInt!
+  paid: BigInt!
+  fee: BigInt!
+  sellerNet: BigInt!
+  payToken: String!
+  discountBps: Int!
+  debtRepaid: BigInt
+  timestamp: Int! @index
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+  txFrom: String!
+}
+
+# Fees by pay token. id = "{market}-{payToken}".
+type FeeTotal {
+  id: ID!
+  market: Market!
+  payToken: String!
+  fees: BigInt!
+  gross: BigInt!
+  sellerNet: BigInt!
+  fillCount: Int!
+}
+
+# One per ReceiptRedeemed log. id = "{blockNumber}-{logIndex}".
+type Redemption {
+  id: ID!
+  market: Market!
+  holder: Account!
+  to: String!
+  assets: BigInt!
+  bySelioVault: Boolean!
+  timestamp: Int!
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+}
+
+# Market activity per bucket. id = "{market}-{interval}-{start}".
+type MarketInterval {
+  id: ID!
+  market: Market!
+  interval: Interval!
+  start: Int! @index
+  fillCount: Int!
+  filledAssets: BigInt!
+  borrowerFilledAssets: BigInt!
+  bidFilledAssets: BigInt!
+  debtRepaid: BigInt!
+  discountWeighted: BigInt!
+  avgDiscountBps: Int
+  minDiscountBps: Int
+  maxDiscountBps: Int
+  feesByToken: Json!
+  sessionsOpened: Int!
+  bidsPlaced: Int!
+  redeemedAssets: BigInt!
+}
+
+# Exit capacity and bid depth at the last event of a bucket. id = "{market}-{interval}-{start}".
+type CapacityPoint {
+  id: ID!
+  market: Market!
+  interval: Interval!
+  start: Int! @index
+  updatedAt: Int!
+  blockNumber: Int!
+  withdrawable: BigInt!
+  supplied: BigInt!
+  utilizationBps: Int!
+  debtorCapacity: BigInt!
+  sessionAssets: BigInt!
+  bidAt100: BigInt!
+  bidAt300: BigInt!
+  bidAt500: BigInt!
+  bidAt1000: BigInt!
+  bidAt2000: BigInt!
+  bidCapacityExact: Boolean!
+}
+
+# The Selio Vault. id = vault address.
+# The source* fields follow the base-yield events: sourceShares are the yield-source shares the vault
+# deposited and still holds; lastPullUtilizationBps is the source utilization reported by the latest
+# pull-back (null before the first one).
+type SelioVaultState {
+  id: ID!
+  market: Market!
+  asset: String!
+  totalSupply: BigInt!
+  totalAssets: BigInt!
+  idle: BigInt!
+  assetsPerShare: BigInt!
+  depositedAssets: BigInt!
+  redeemedAssets: BigInt!
+  redeemedReceiptUnits: BigInt!
+  boughtAssets: BigInt!
+  boughtCost: BigInt!
+  boughtFills: Int!
+  recoveredAssets: BigInt!
+  recoveryRateBps: Int
+  costRecoveryBps: Int
+  deferredUnits: BigInt!
+  claimedUnits: BigInt!
+  sourceShares: BigInt!
+  sourceDepositedAssets: BigInt!
+  sourceWithdrawnAssets: BigInt!
+  sourcePulledAssets: BigInt!
+  sourceSharesInKind: BigInt!
+  lastPullUtilizationBps: Int
+  liveBid: Bid
+  updatedAt: Int!
+  actions: [VaultAction!]! @derivedFrom(field: "vault")
+  intervals: [VaultInterval!]! @derivedFrom(field: "vault")
+}
+
+# One per Deposit, Redeem, Recovered, ReceiptDeferred, ReceiptClaimed, SourceDeposited,
+# SourceWithdrawn, SourcePulled or SourceSharesInKind log. id = "{blockNumber}-{logIndex}".
+# For SOURCE_DEPOSIT, SOURCE_WITHDRAW and SOURCE_PULL the account is the Selio Vault itself (the
+# events name no caller); utilizationBps is set for SOURCE_PULL only.
+type VaultAction {
+  id: ID!
+  vault: SelioVaultState!
+  kind: VaultActionKind!
+  account: Account!
+  receiver: String
+  assets: BigInt
+  shares: BigInt
+  receiptUnits: BigInt
+  strategy: Int
+  utilizationBps: Int
+  timestamp: Int! @index
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+}
+
+# Vault state at the last event of a bucket. id = "{vault}-{interval}-{start}".
+type VaultInterval {
+  id: ID!
+  vault: SelioVaultState!
+  interval: Interval!
+  start: Int! @index
+  totalAssets: BigInt!
+  idle: BigInt!
+  totalSupply: BigInt!
+  assetsPerShare: BigInt!
+  depositedAssets: BigInt!
+  redeemedAssets: BigInt!
+  recoveredAssets: BigInt!
+  boughtAssets: BigInt!
+  boughtCost: BigInt!
+  sourceShares: BigInt!
+}
+
+# The protected Earn vault (Vault V2). id = vault address.
+type EarnVaultState {
+  id: ID!
+  idle: BigInt!
+  totalAssets: BigInt!
+  totalSupply: BigInt!
+  depositedAssets: BigInt!
+  withdrawnAssets: BigInt!
+  penaltyAssets: BigInt!
+  updatedAt: Int!
+}
+
+# A Morpho Blue market of the deployment. id = market id (bytes32 hex).
+type MorphoMarket {
+  id: ID!
+  role: MorphoMarketRole!
+  totalSupplyAssets: BigInt!
+  totalSupplyShares: BigInt!
+  totalBorrowAssets: BigInt!
+  totalBorrowShares: BigInt!
+  adapterSupplyShares: BigInt!
+  updatedAt: Int!
+}
+
+# Pool activity log. id = "{blockNumber}-{logIndex}".
+type PoolEvent {
+  id: ID!
+  kind: PoolEventKind!
+  account: Account
+  receiver: String
+  marketId: String
+  assets: BigInt!
+  shares: BigInt
+  penaltyAssets: BigInt
+  timestamp: Int! @index
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+}
+
+# Borrower position in a Morpho market. id = "{marketId}-{account}".
+type BorrowPosition {
+  id: ID!
+  account: Account!
+  marketId: String!
+  borrowShares: BigInt!
+  collateral: BigInt!
+  updatedAt: Int!
+}
+
+# A wallet. id = address.
+type Account {
+  id: ID!
+  receiptShares: BigInt!
+  vaultShares: BigInt!
+  sessionsOpened: Int!
+  soldAssets: BigInt!
+  boughtAssets: BigInt!
+  debtRepaid: BigInt!
+  bidsPlaced: Int!
+  firstSeenAt: Int!
+  lastSeenAt: Int!
+  sessions: [Session!]! @derivedFrom(field: "seller")
+  bids: [Bid!]! @derivedFrom(field: "bidder")
+  sales: [Fill!]! @derivedFrom(field: "seller")
+  purchases: [Fill!]! @derivedFrom(field: "buyer")
+  tokens: [AccountToken!]! @derivedFrom(field: "account")
+  redemptions: [Redemption!]! @derivedFrom(field: "holder")
+  vaultActions: [VaultAction!]! @derivedFrom(field: "account")
+  poolEvents: [PoolEvent!]! @derivedFrom(field: "account")
+  borrowPositions: [BorrowPosition!]! @derivedFrom(field: "account")
+}
+
+# Per wallet and token totals. id = "{account}-{token}".
+type AccountToken {
+  id: ID!
+  account: Account!
+  token: String!
+  receivedNet: BigInt!
+  feesPaid: BigInt!
+  paidAsBuyer: BigInt!
+  escrowLive: BigInt!
+}

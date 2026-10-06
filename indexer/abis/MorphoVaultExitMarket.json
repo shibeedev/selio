@@ -1,0 +1,289 @@
+[
+  {
+    "type": "event",
+    "name": "SessionOpened",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "sessionId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "seller",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "assets",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "units",
+        "indexed": false
+      },
+      {
+        "type": "tuple",
+        "name": "params",
+        "components": [
+          {
+            "type": "uint16",
+            "name": "startBps"
+          },
+          {
+            "type": "uint16",
+            "name": "stepBps"
+          },
+          {
+            "type": "uint32",
+            "name": "stepInterval"
+          },
+          {
+            "type": "uint16",
+            "name": "capBps"
+          },
+          {
+            "type": "uint32",
+            "name": "duration"
+          },
+          {
+            "type": "uint8",
+            "name": "payMask"
+          }
+        ],
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "UnsoldWithdrawn",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "sessionId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "seller",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "units",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "assets",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Bought",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "sessionId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "buyer",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "assets",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "debtRepaid",
+        "indexed": false
+      },
+      {
+        "type": "uint16",
+        "name": "discountBps",
+        "indexed": false
+      },
+      {
+        "type": "address",
+        "name": "payToken",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "paid",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "fee",
+        "indexed": false
+      },
+      {
+        "type": "uint8",
+        "name": "mode",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BidPlaced",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "bidId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "bidder",
+        "indexed": true
+      },
+      {
+        "type": "uint16",
+        "name": "minDiscountBps",
+        "indexed": false
+      },
+      {
+        "type": "address",
+        "name": "payToken",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "maxAssets",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "escrow",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BidCancelled",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "bidId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "bidder",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "refunded",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BidResized",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "bidId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "bidder",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "maxAssets",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "escrow",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BidFilled",
+    "inputs": [
+      {
+        "type": "uint256",
+        "name": "bidId",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "sessionId",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "seller",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "assets",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "paid",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "fee",
+        "indexed": false
+      },
+      {
+        "type": "uint16",
+        "name": "discountBps",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReceiptRedeemed",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "holder",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "to",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "assets",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  }
+]
