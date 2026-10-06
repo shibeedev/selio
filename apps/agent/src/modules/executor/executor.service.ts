@@ -107,7 +107,7 @@ export class ExecutorService {
   enqueue(actionId: number): void {
     const task: Promise<void> = this.run(actionId)
       .catch((err: unknown) => {
-        this.logger.error({ actionId, err: errorFields(err) }, "action crashed");
+        this.logger.error({ actionId, error: errorFields(err) }, "action crashed");
       })
       .finally(() => {
         this.running.delete(task);
@@ -169,7 +169,7 @@ export class ExecutorService {
       try {
         receipt = await this.chain.findReceipt(hash);
       } catch (err) {
-        this.logger.warn({ actionId: row.id, err: errorFields(err) }, "receipt lookup failed during reconciliation");
+        this.logger.warn({ actionId: row.id, error: errorFields(err) }, "receipt lookup failed during reconciliation");
       }
       if (receipt?.status === "success") {
         const used = row.kind !== "cancel" && row.assets !== null ? BigInt(row.assets) : 0n;

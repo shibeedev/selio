@@ -8,7 +8,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
   const log = logger.child({ module: "http" });
   return (err, req, res, next) => {
     if (res.headersSent) {
-      log.error({ err: errorFields(err), requestId: req.id }, "error after response started");
+      log.error({ error: errorFields(err), requestId: req.id }, "error after response started");
       next(err);
       return;
     }
@@ -21,7 +21,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       return;
     }
     if (err instanceof AppError) {
-      if (err.statusCode >= 500) log.error({ err: errorFields(err), requestId: req.id }, err.message);
+      if (err.statusCode >= 500) log.error({ code: err.code, requestId: req.id }, err.message);
       res.status(err.statusCode).json({
         code: err.code,
         message: err.message,
@@ -38,7 +38,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       res.status(413).json({ code: ErrorCode.PAYLOAD_TOO_LARGE, message: "Request body is too large" });
       return;
     }
-    log.error({ err: errorFields(err), requestId: req.id }, "unhandled error");
+    log.error({ error: errorFields(err), requestId: req.id }, "unhandled error");
     res.status(500).json({ code: ErrorCode.INTERNAL_ERROR, message: "Internal server error" });
   };
 }

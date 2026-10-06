@@ -96,7 +96,7 @@ async function main(): Promise<void> {
       { port: config.port, host: HOST, deploymentsDir: config.deploymentsDir, mcpUrl: config.mcpUrl, dynamic: dynamic !== null },
       "listening",
     );
-    executor.reconcile(reconcileUpTo).catch((err: unknown) => log.error({ err: errorFields(err) }, "reconciliation failed"));
+    executor.reconcile(reconcileUpTo).catch((err: unknown) => log.error({ error: errorFields(err) }, "reconciliation failed"));
   });
 
   let shuttingDown = false;

@@ -24,7 +24,10 @@ export function httpLogger(logger: Logger) {
   });
 }
 
-/** Error fields safe to log: never the enumerable properties, which can carry request headers. */
+/**
+ * Error fields safe to log, under the key `error` (pino's `err` serializer would add the enumerable
+ * properties, which can carry request headers).
+ */
 export function errorFields(err: unknown): { type: string; message: string; stack?: string } {
   return err instanceof Error
     ? { type: err.name, message: err.message, stack: err.stack }

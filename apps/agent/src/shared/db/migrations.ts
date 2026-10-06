@@ -13,21 +13,21 @@ export const MIGRATIONS: Migration[] = [
     name: "init",
     up: `
 CREATE TABLE delegations (
-  wallet_id      TEXT PRIMARY KEY,
-  user_id        TEXT NOT NULL,
-  address        TEXT NOT NULL,
-  share_set_id   TEXT,
-  sealed_share   TEXT,
-  sealed_api_key TEXT,
+  wallet_id      TEXT PRIMARY KEY,            -- Dynamic walletId (uuid)
+  user_id        TEXT NOT NULL,               -- Dynamic userId (JWT sub)
+  address        TEXT NOT NULL,               -- lowercase; data.publicKey of the created event
+  share_set_id   TEXT,                        -- from the payload when present
+  sealed_share   TEXT,                        -- seal(JSON of ServerKeyShare); NULL after revocation
+  sealed_api_key TEXT,                        -- seal(walletApiKey); NULL after revocation
   status         TEXT NOT NULL CHECK (status IN ('active', 'revoked', 'invalid')),
-  event_at       INTEGER NOT NULL,
+  event_at       INTEGER NOT NULL,            -- ms of the Dynamic event that set this state
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
 );
 CREATE INDEX delegations_address ON delegations (address);
 
 CREATE TABLE grants (
-  id                    TEXT PRIMARY KEY,
+  id                    TEXT PRIMARY KEY,     -- uuid from the web app; hook path
   address               TEXT NOT NULL,
   user_id               TEXT NOT NULL,
   network               TEXT NOT NULL CHECK (network = 'monad-testnet'),
@@ -52,39 +52,39 @@ CREATE TABLE actions (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   grant_id        TEXT NOT NULL REFERENCES grants (id),
   kind            TEXT NOT NULL CHECK (kind IN ('sell', 'bid', 'vault', 'cancel')),
-  trigger_at      INTEGER NOT NULL,
+  trigger_at      INTEGER NOT NULL,           -- \`at\` of the alert payload; 0 for a cancel on grant deletion
   utilization_bps INTEGER,
   assets          TEXT,
   fee             TEXT,
   net             TEXT,
   status          TEXT NOT NULL CHECK (status IN ('planned', 'sending', 'done', 'failed', 'skipped')),
-  tx_hashes       TEXT NOT NULL DEFAULT '[]',
-  bid_id          TEXT,
+  tx_hashes       TEXT NOT NULL DEFAULT '[]', -- JSON array
+  bid_id          TEXT,                       -- bid placed (bid) or cancelled (cancel)
   message         TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL,
   UNIQUE (grant_id, kind, trigger_at)
 );
 
-CREATE TABLE intents (
-  id         TEXT PRIMARY KEY,
+CREATE TABLE intents (                        -- one row per transaction the agent is about to sign
+  id         TEXT PRIMARY KEY,                -- uuid
   wallet_id  TEXT NOT NULL,
   chain_id   INTEGER NOT NULL,
-  to_addr    TEXT NOT NULL,
-  data_hash  TEXT NOT NULL,
+  to_addr    TEXT NOT NULL,                   -- lowercase
+  data_hash  TEXT NOT NULL,                   -- keccak256 of the calldata
   nonce      INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   used       INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX intents_lookup ON intents (wallet_id, to_addr, nonce);
 
-CREATE TABLE webhook_events (
+CREATE TABLE webhook_events (                 -- idempotency of Dynamic deliveries
   event_id    TEXT PRIMARY KEY,
   event_name  TEXT NOT NULL,
   received_at INTEGER NOT NULL
 );
 
-CREATE TABLE rate_limit_hits (
+CREATE TABLE rate_limit_hits (                -- same layout and use as the backend (Part 6 §C.3)
   key          TEXT NOT NULL,
   window_start INTEGER NOT NULL,
   hits         INTEGER NOT NULL,
