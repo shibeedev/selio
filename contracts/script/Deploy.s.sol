@@ -96,6 +96,9 @@ contract Deploy is Script, MorphoStack {
         vm.serializeUint(out, "deployBlock", block.number);
         vm.serializeAddress(out, "deployer", deployer);
         bytes32 n = keccak256(bytes(network));
+        string memory dir = vm.envOr("DEPLOY_OUT_DIR", string("./deployments/"));
+        // Create the output folder before broadcasting, so a path that cannot be written fails before any transaction.
+        vm.createDir(dir, true);
         vm.startBroadcast(pk);
         if (n == keccak256("usdt0-replay")) _deployAave(_usdt0Replay(), "Selio Vault USDT0", "slUSDT0");
         else if (n == keccak256("monad-testnet")) _deployMonadTestnet();
@@ -103,7 +106,7 @@ contract Deploy is Script, MorphoStack {
         else revert("unknown DEPLOY_NETWORK");
         vm.stopBroadcast();
         string memory json = vm.serializeString(out, "venue", _isAave(n) ? "aave" : "morpho");
-        vm.writeJson(json, string.concat(vm.envOr("DEPLOY_OUT_DIR", string("./deployments/")), network, ".json"));
+        vm.writeJson(json, string.concat(dir, network, ".json"));
     }
 
     function _isAave(bytes32 n) internal pure returns (bool) {
