@@ -512,6 +512,7 @@ describe("SelioVault", () => {
       chains: {
         10143: {
           simulate: [
+            // A refresh moves cash to or from the source before it reports the vault's totals.
             {
               contract: "SelioVault",
               event: "SourceDeposited",
@@ -521,10 +522,24 @@ describe("SelioVault", () => {
             },
             {
               contract: "SelioVault",
+              event: "BidsRefreshed",
+              srcAddress: vault,
+              ...at(1, 1),
+              params: { totalAssets: 1_000_000_000n, idle: 200_000_000n },
+            },
+            {
+              contract: "SelioVault",
               event: "SourceWithdrawn",
               srcAddress: vault,
               ...at(2),
               params: { assets: 100_000_000n, shares: 98_000_000n },
+            },
+            {
+              contract: "SelioVault",
+              event: "BidsRefreshed",
+              srcAddress: vault,
+              ...at(2, 1),
+              params: { totalAssets: 1_000_000_000n, idle: 300_000_000n },
             },
             {
               contract: "SelioVault",
@@ -545,7 +560,10 @@ describe("SelioVault", () => {
       },
     });
 
+    // The pull-back adds its 300 USDC to idle; the total is unchanged until the next refresh reports it.
     expect(await indexer.SelioVaultState.getOrThrow(vault)).toMatchObject({
+      totalAssets: 1_000_000_000n,
+      idle: 600_000_000n,
       sourceShares: 300_000_000n,
       sourceDepositedAssets: 800_000_000n,
       sourceWithdrawnAssets: 100_000_000n,

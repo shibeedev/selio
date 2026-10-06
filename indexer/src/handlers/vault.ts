@@ -129,6 +129,8 @@ indexer.onEvent({ contract: "SelioVault", event: "SourcePulled" }, async ({ even
       vault.sourceShares = clampSub(vault.sourceShares, shares);
       vault.sourcePulledAssets += assets;
       vault.lastPullUtilizationBps = utilization;
+      // pullFromSource emits no BidsRefreshed: the cash it brings back is idle until the next refresh.
+      vault.idle += assets;
     },
   );
 });
