@@ -337,6 +337,8 @@ async function forkFlow(page: Page, r: Recorder, network: string, amounts: Amoun
   for (const kit of ["seller", "borrower", "bidder"]) {
     await r.step(`${network}: get the ${kit} demo kit from the faucet`, async () => {
       await page.goto("#/sell");
+      // Every kit is offered in the wallet menu; open it when the page shows no button for this kit.
+      if (!(await page.eval<boolean>(`Boolean(${q(`demo-kit-${kit}`)})`))) await page.click("wallet-button");
       await page.click(`demo-kit-${kit}`);
       await page.waitFor(`${q("demo-funds-result")} && !${q("demo-funds-result")}.textContent.includes("…")`, 240_000, "faucet result");
       const result = await page.text("demo-funds-result");
