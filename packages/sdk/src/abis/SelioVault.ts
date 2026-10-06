@@ -385,7 +385,7 @@ export const selioVaultAbi = [
         "internalType": "uint256[]"
       },
       {
-        "name": "sourceSharesInKind",
+        "name": "sourceInKind",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -427,7 +427,7 @@ export const selioVaultAbi = [
     ],
     "outputs": [
       {
-        "name": "",
+        "name": "redeemed",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -469,6 +469,11 @@ export const selioVaultAbi = [
         "name": "receipts",
         "type": "uint256[]",
         "internalType": "uint256[]"
+      },
+      {
+        "name": "sourceInKind",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"

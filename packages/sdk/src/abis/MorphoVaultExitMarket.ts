@@ -487,7 +487,7 @@ export const morphoVaultExitMarketAbi = [
     ],
     "outputs": [
       {
-        "name": "fee",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -776,7 +776,7 @@ export const morphoVaultExitMarketAbi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "address"
+        "internalType": "contract PriceRouter"
       }
     ],
     "stateMutability": "view"
@@ -818,7 +818,7 @@ export const morphoVaultExitMarketAbi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "address"
+        "internalType": "contract IERC20"
       }
     ],
     "stateMutability": "view"

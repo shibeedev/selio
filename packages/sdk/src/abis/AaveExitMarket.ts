@@ -587,7 +587,7 @@ export const aaveExitMarketAbi = [
     ],
     "outputs": [
       {
-        "name": "fee",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -894,7 +894,7 @@ export const aaveExitMarketAbi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "address"
+        "internalType": "contract PriceRouter"
       }
     ],
     "stateMutability": "view"
@@ -936,7 +936,7 @@ export const aaveExitMarketAbi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "address"
+        "internalType": "contract IERC20"
       }
     ],
     "stateMutability": "view"
