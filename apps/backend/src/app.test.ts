@@ -1,3 +1,9 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createChainLayer } from "@selio/mcp";
 import type { Express } from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +19,7 @@ import {
   SIGNER,
   silentLogger,
   testDb,
+  USDT0_REPLAY_DEPLOYMENT,
 } from "./testing/fakes.js";
 
 const HOUR = 3_600_000;
@@ -362,6 +369,50 @@ describe("MCP over Streamable HTTP", () => {
     const names = (list.body.result.tools as { name: string }[]).map((t) => t.name);
     expect(names).toContain("build_buy_and_repay");
     expect(names).toContain("simulate_transaction");
+  });
+
+  it("bounds the chain reads of one request with mcpMaxReadsPerRequest", async () => {
+    // A fork node stand-in that answers every eth_call with zero words and counts requests per URL path.
+    const received: Record<string, number> = {};
+    const node = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        received[req.url ?? ""] = (received[req.url ?? ""] ?? 0) + 1;
+        const { id } = JSON.parse(body) as { id: number };
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ jsonrpc: "2.0", id, result: `0x${"00".repeat(160)}` }));
+      });
+    });
+    await new Promise<void>((resolve) => node.listen(0, "127.0.0.1", resolve));
+    const dir = mkdtempSync(join(tmpdir(), "selio-mcp-"));
+    mkdirSync(join(dir, "local"));
+    writeFileSync(join(dir, "local", "usdt0-replay.json"), JSON.stringify(USDT0_REPLAY_DEPLOYMENT));
+    const nodeUrl = `http://127.0.0.1:${(node.address() as AddressInfo).port}`;
+    const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_exit_capacity", arguments: { network: "usdt0-replay" } } };
+    const appWith = (path: string, mcpMaxReadsPerRequest?: number) =>
+      createApp({
+        db,
+        logger: silentLogger,
+        chain,
+        mcpChain: createChainLayer({ deploymentsDir: dir, rpcUrls: { "usdt0-replay": `${nodeUrl}${path}` } }),
+        corsOrigin: "*",
+        mcpMaxReadsPerRequest,
+      }).app;
+    try {
+      const bounded = await request(appWith("/bounded", 3)).post("/mcp").set(MCP_HEADERS).send(call).expect(200);
+      expect(bounded.body.result.isError).toBe(true);
+      expect(bounded.body.result.content[0].text).toMatch(/^This request needs more than 3 chain reads/);
+
+      const unbounded = await request(appWith("/unbounded")).post("/mcp").set(MCP_HEADERS).send(call).expect(200);
+      expect(unbounded.body.result.isError).toBeUndefined();
+      expect(received["/unbounded"]).toBe(8);
+      // The three reads the budget allowed were already on their way when the fourth was refused.
+      await vi.waitFor(() => expect(received["/bounded"]).toBe(3));
+    } finally {
+      await new Promise((resolve) => node.close(resolve));
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("rejects GET and DELETE in stateless mode", async () => {
