@@ -9,8 +9,10 @@ import {
   keccak256,
   parseTransaction,
   parseUnits,
+  recoverTransactionAddress,
   type Address,
   type Hex,
+  type TransactionSerialized,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DelegationRepository } from "../modules/delegations/index.js";
@@ -98,8 +100,6 @@ export class FakeChain implements ChainPort {
   readonly bids = new Map<bigint, BidState>();
   readonly minEscrows = new Map<string, bigint>();
   readonly sent: Hex[] = [];
-  /** Receipt status by transaction hash; unknown hashes confirm successfully. */
-  readonly statuses = new Map<Hex, ReceiptView["status"]>();
   /** Hashes `findReceipt` knows (start-up reconciliation). */
   readonly mined = new Map<Hex, ReceiptView>();
   nextBidId = 42n;
@@ -160,15 +160,39 @@ export class FakeChain implements ChainPort {
   async prepare() {
     return this.prepared;
   }
+  /** Broadcasts; a cancelled bid refunds its escrow and a placed bid pulls escrow and allowance, as on chain. */
   async sendRawTransaction(serialized: Hex) {
     this.sent.push(serialized);
     const hash = keccak256(serialized);
     const tx = parseTransaction(serialized);
-    if (tx.data?.startsWith("0x04978e30")) this.placed.set(hash, this.nextBidId++);
+    const from = await recoverTransactionAddress({ serializedTransaction: serialized as TransactionSerialized });
+    if (!this.revertAll && tx.data && lc(tx.to ?? "") === lc(this.deploymentValue.market)) {
+      const call = decodeFunctionData({ abi: aaveExitMarketAbi, data: tx.data });
+      if (call.functionName === "cancelBid") {
+        const [bidId] = call.args;
+        const bid = this.bids.get(bidId);
+        if (bid) {
+          this.bids.delete(bidId);
+          const pay = this.deploymentValue.payTokens[bid.payIdx]!;
+          this.setBalance(pay, bid.bidder, (await this.balanceOf(pay, bid.bidder)) + bid.escrow);
+        }
+      }
+      if (call.functionName === "placeBid") {
+        const [minDiscountBps, payIdx, maxAssets, escrow] = call.args;
+        const pay = this.deploymentValue.payTokens[payIdx]!;
+        const id = this.nextBidId++;
+        this.placed.set(hash, id);
+        this.bids.set(id, { bidder: from, minDiscountBps, payIdx, maxAssets, escrow });
+        this.setBalance(pay, from, (await this.balanceOf(pay, from)) - escrow);
+        this.setAllowance(pay, from, this.deploymentValue.market, (await this.allowance(pay, from, this.deploymentValue.market)) - escrow);
+      }
+    }
     return hash;
   }
+  /** Every broadcast transaction reverts while set. */
+  revertAll = false;
   async waitForReceipt(hash: Hex): Promise<ReceiptView> {
-    return { status: this.statuses.get(hash) ?? "success", placedBidId: this.placed.get(hash) ?? null };
+    return { status: this.revertAll ? "reverted" : "success", placedBidId: this.placed.get(hash) ?? null };
   }
   async findReceipt(hash: Hex) {
     return this.mined.get(hash) ?? null;
