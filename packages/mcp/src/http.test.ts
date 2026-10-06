@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { handleStreamableHttpRequest, type SelioMcpOptions } from "./server.js";
-import { AAVE_DEPLOYMENT } from "./testing/fakes.js";
+import { AAVE_DEPLOYMENT, MORPHO_DEPLOYMENT } from "./testing/fakes.js";
 import { listen, startRpcStub } from "./testing/rpc-stub.js";
 
 const LIMIT = /^This request needs more than \d+ chain reads, the limit of this MCP endpoint\./;
@@ -132,6 +132,59 @@ describe("Streamable HTTP", () => {
       const single = (await (await post(url, capacityCall(3))).json()) as ToolReply;
       expect(single.result.isError).toBeFalsy();
     });
+  });
+
+  it("gives get_history the indexer URL of the options and counts its chain-head read against the bound", async () => {
+    const testnet = { ...MORPHO_DEPLOYMENT, network: "monad-testnet", chainId: 10143 };
+    writeFileSync(join(deploymentsDir, "monad-testnet.json"), JSON.stringify(testnet));
+    const meta = { chainId: 10143, progressBlock: 500, sourceBlock: 505, isReady: true, readyAt: null };
+    const index = await listen(
+      createServer((req, res) => {
+        req.resume();
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "application/json" });
+          const market = { id: testnet.market.toLowerCase(), updatedAt: 1 };
+          res.end(JSON.stringify({ data: { _meta: [meta], market, fills: [], fees: [] } }));
+        });
+      }),
+    );
+    const rpc = await startRpcStub();
+    const options = (maxReadsPerRequest: number): SelioMcpOptions => ({
+      deploymentsDir,
+      rpcUrls: { "monad-testnet": rpc.url },
+      indexerUrl: `${index.url}/v1/graphql`,
+      maxReadsPerRequest,
+    });
+    const call = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "get_history", arguments: { network: "monad-testnet", view: "fills" } },
+    };
+    try {
+      await withEndpoint(options(3), async (url) => {
+        const reply = (await (await post(url, call)).json()) as ToolReply;
+        expect(reply.result.isError).toBeFalsy();
+        // This node refuses eth_blockNumber, so the head and the lag are unknown.
+        expect(JSON.parse(reply.result.content[0]!.text).index).toEqual({
+          source: "Envio HyperIndex",
+          indexedToBlock: 500,
+          chainHead: null,
+          lagBlocks: null,
+          ready: true,
+        });
+      });
+      // The head read, then symbol() and decimals() of the underlying.
+      expect(rpc.requests()).toBe(3);
+      await withEndpoint(options(2), async (url) => {
+        const reply = (await (await post(url, call)).json()) as ToolReply;
+        expect(reply.result.isError).toBe(true);
+        expect(reply.result.content[0]!.text).toMatch(LIMIT);
+      });
+    } finally {
+      await rpc.close();
+      await index.close();
+    }
   });
 
   it("does not count reads without a bound", async () => {
