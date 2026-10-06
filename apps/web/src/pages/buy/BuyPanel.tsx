@@ -395,7 +395,14 @@ export function BuyPanel({
           {quoted((q) => `${formatToken(q, payToken as TokenInfo)}${mode === "flash" ? " of your collateral" : ""}`)}
         </SummaryRow>
         <SummaryRow label="Debt repaid" testid="buy-debt-repaid">
-          {debtRepaid === null ? "—" : `${formatToken(debtRepaid, U)}${repayNote ? ` (${repayNote})` : ""}`}
+          {debtRepaid === null ? (
+            "—"
+          ) : (
+            <>
+              {formatToken(debtRepaid, U)}
+              {repayNote && <span className="summary-note"> ({repayNote})</span>}
+            </>
+          )}
         </SummaryRow>
         <Highlight label="You save" tone="good" testid="buy-savings">
           {savings === null ? "—" : formatToken(savings, U)}
