@@ -10,7 +10,7 @@
     "tools/*"
   ],
   "scripts": {
-    "build": "npm run build -w @selio/sdk -w @selio/forkkit -w @selio/mcp -w @selio/backend -w @selio/web",
+    "build": "npm run build -w @selio/sdk -w @selio/forkkit -w @selio/mcp -w @selio/backend -w @selio/agent -w @selio/web",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "abis": "node packages/sdk/scripts/export-abis.mjs",

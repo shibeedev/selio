@@ -25,6 +25,7 @@ archive/
 .env.*
 !.env.example
 *.key
+*.pem
 keystore/
 
 # Node
@@ -36,6 +37,9 @@ build/
 coverage/
 *.tsbuildinfo
 npm-debug.log*
+
+# Local service data
+apps/agent/data/
 
 # Foundry
 contracts/out/
