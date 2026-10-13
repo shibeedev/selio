@@ -9,7 +9,7 @@ import {
   type SessionParams,
 } from "@selio/sdk";
 import { FREEZER, bidderKit, borrowerKit, refreeze, sellerKit, type KitContext } from "@selio/forkkit";
-import { ensureAllowance, expectRevert, fillTotals, send, type Actor } from "../lib/chain.js";
+import { ensureAllowance, expectRevert, fillTotals, send, vaultKuru, type Actor } from "../lib/chain.js";
 import { check, near, type Recorder } from "../lib/report.js";
 
 const USD = 10n ** 6n;
@@ -63,6 +63,8 @@ export async function aaveScenario(
   let sessionId = 0n;
   let bidId = 0n;
   let feeRecipient = "0x" as Address;
+  /** Sold into the vault's bid: 8 aMonUSDT0, or the Selio bid's share of it while the vault also quotes on Kuru. */
+  let vaultSale = 8n * USD;
 
   await r.step("setup: seller holds 100 aMonUSDT0 in the frozen pool", async () => {
     await sellerKit(kit, a.seller.address, 100n * USD, leave);
@@ -269,14 +271,25 @@ export async function aaveScenario(
     check(v.bidId > 0n, "vault has no bid");
     const bid = (await sdk.bids()).find((b) => b.id === v.bidId);
     check(bid && bid.minDiscountBps === 300, "vault bid wrong");
-    near(bid.escrow, 10n * USD, 10n, "vault escrow");
-    return { vaultTotal: fmt(v.totalAssets), bidEscrowUSDT0: fmt(bid.escrow), tooFewShares };
+    // The room under the 20% cap is 10 USDT0; the vault may quote up to its Kuru share of it on Kuru, the rest in
+    // its Selio bid.
+    const kuru = await vaultKuru(sdk);
+    const room = (v.totalAssets * BigInt(v.maxShareBps)) / 10_000n;
+    near(bid.escrow + kuru.escrow, room, 10n, "vault escrow");
+    check(kuru.escrow <= (room * BigInt(kuru.shareBps)) / 10_000n, `vault quotes ${kuru.escrow} on Kuru`);
+    if (kuru.escrow > 0n) vaultSale = (vaultSale * BigInt(10_000 - kuru.shareBps)) / 10_000n;
+    return {
+      vaultTotal: fmt(v.totalAssets),
+      bidEscrowUSDT0: fmt(bid.escrow),
+      kuruEscrowUSDT0: fmt(kuru.escrow),
+      tooFewShares,
+    };
   });
 
   await r.step(
-    "seller sells 8 aMonUSDT0 into the vault's bid, re-sized by anyone in between, and receives USDT0 at once",
+    `seller sells ${fmt(vaultSale)} aMonUSDT0 into the vault's bid, re-sized by anyone in between, and receives USDT0 at once`,
     async () => {
-      const assets = 8n * USD;
+      const assets = vaultSale;
       const plan = await sdk.planSellNow(assets, 300, 0b0100);
       check(plan.filledAssets === assets, `plan filled ${plan.filledAssets}`);
       const before = (await sdk.vaultState()).bidId;
@@ -292,16 +305,19 @@ export async function aaveScenario(
       await send(r, sdk, a.seller, sdk.sellNow(plan, 300, 0b0100, plan.filledAssets));
       const [seller1, fee1] = await Promise.all([bal(underlying, a.seller.address), bal(underlying, feeRecipient)]);
       const got = seller1 - seller0;
-      // The vault pays 7.76 USDT0; the 0.2% fee on it is 0.01552 USDT0.
-      near(got, (assets * 97n) / 100n - 15_520n, 1n, "USDT0 received at 3%");
+      // For 8 aMonUSDT0 the vault pays 7.76 USDT0; the 0.2% fee on it is 0.01552 USDT0.
+      const paid = (assets * 97n) / 100n;
+      near(got, paid - (paid * 20n) / 10_000n, 1n, "USDT0 received at 3%");
       check(fee1 - fee0 === (plan.fees[underlying] ?? 0n), "fee not paid to the recipient");
-      const [held, cost] = await Promise.all([
+      const [held, cost, kuru] = await Promise.all([
         bal(aToken, d.selioVault),
-        // `heldCost` is what the vault paid for the receipts its bid bought (`heldAssets` is their face value).
+        // `heldCost` is what the vault paid for the receipts its bid bought (`heldAssets` is their face value), plus
+        // what its resting Kuru order could not get back on a cancel.
         sdk.client.readContract({ address: d.selioVault, abi: selioVaultAbi, functionName: "heldCost", args: [0n] }),
+        vaultKuru(sdk),
       ]);
       near(held, assets, 10n, "vault holds the receipts");
-      near(cost, (assets * 97n) / 100n, 1n, "vault holds the receipts at cost");
+      near(cost - kuru.pendingCost, paid, 1n, "vault holds the receipts at cost");
       return {
         receivedUSDT0: fmt(got),
         feeUSDT0: fmt(fee1 - fee0),

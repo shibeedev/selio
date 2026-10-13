@@ -22,6 +22,25 @@ function raw(to: Address, data: Hex, description: string): UnsignedTx {
   return { to, data, value: 0n, description };
 }
 
+// Amounts sized to the testnet accounts: about 9 USDC leaves the seller's wallet in all (2 flash liquidity, 5 Earn,
+// 2 Selio Vault); the buyer's USDC is what it borrows.
+const FLASH_SEED = 2n * USD;
+const EARN_DEPOSIT = 5n * USD;
+const BUYER_BORROW = 2n * USD;
+const SESSION = 3n * USD;
+const BUY = 1n * USD;
+const FLASH_BUY = USD / 2n;
+const BID = 1n * USD;
+const SELL_NOW = USD / 2n;
+const MATCH_SESSION = USD / 2n;
+const VAULT_DEPOSIT = 2n * USD;
+const VAULT_SALE = USD / 4n;
+/** Earn shares the seller sells in one run. */
+const EARN_NEEDED = SESSION + SELL_NOW + MATCH_SESSION + VAULT_SALE;
+/** The buyer gets 1 MON of gas when it holds less than 0.5 MON (a purchase costs about 0.06 MON at 102 gwei). */
+const BUYER_GAS_MIN = 5n * 10n ** 17n;
+const BUYER_GAS_TOP_UP = 10n ** 18n;
+
 /**
  * Monad Testnet, self-deployed Morpho Earn stack, testnet funds: the deployer seeds the Earn vault and borrows its
  * liquidity out so it is frozen; the second account borrows and buys.
@@ -114,12 +133,12 @@ export async function liveMorphoScenario(
   let bidId = 0n;
 
   await r.step("fund the buyer with gas", async () => {
-    if ((await sdk.client.getBalance({ address: buyer.address })) < 2n * 10n ** 15n) {
+    if ((await sdk.client.getBalance({ address: buyer.address })) < BUYER_GAS_MIN) {
       const hash = await seller.wallet.sendTransaction({
         account: seller.account,
         chain: seller.wallet.chain,
         to: buyer.address,
-        value: 3n * 10n ** 15n,
+        value: BUYER_GAS_TOP_UP,
       });
       r.noteTx(hash);
       await sdk.client.waitForTransactionReceipt({ hash });
@@ -127,16 +146,16 @@ export async function liveMorphoScenario(
     return { buyerMON: fmt(await sdk.client.getBalance({ address: buyer.address }), 18) };
   });
 
-  await r.step("seed: 15 USDC of flash liquidity in a separate Morpho market", async () => {
-    if ((await liquidity(d.flashMarketId as Hex)) < 10n * USD) {
-      await ensureAllowance(r, sdk, seller, usdc, morpho, 15n * USD);
+  await r.step(`seed: ${fmt(FLASH_SEED)} USDC of flash liquidity in a separate Morpho market`, async () => {
+    if ((await liquidity(d.flashMarketId as Hex)) < FLASH_SEED) {
+      await ensureAllowance(r, sdk, seller, usdc, morpho, FLASH_SEED);
       await send(
         r,
         sdk,
         seller,
         raw(
           morpho,
-          encodeFunctionData({ abi: morphoAbi, functionName: "supply", args: [flash, 15n * USD, 0n, seller.address, "0x"] }),
+          encodeFunctionData({ abi: morphoAbi, functionName: "supply", args: [flash, FLASH_SEED, 0n, seller.address, "0x"] }),
           "Supply flash liquidity",
         ),
       );
@@ -144,16 +163,16 @@ export async function liveMorphoScenario(
     return { flashLiquidityUSDC: fmt(await liquidity(d.flashMarketId as Hex)) };
   });
 
-  await r.step("seed: seller deposits 50 USDC into the Earn vault", async () => {
-    if ((await sdk.receiptValueOf(seller.address)) < 20n * USD) {
-      await ensureAllowance(r, sdk, seller, usdc, vault, 50n * USD);
+  await r.step(`seed: seller deposits ${fmt(EARN_DEPOSIT)} USDC into the Earn vault`, async () => {
+    if ((await sdk.receiptValueOf(seller.address)) < EARN_NEEDED) {
+      await ensureAllowance(r, sdk, seller, usdc, vault, EARN_DEPOSIT);
       await send(
         r,
         sdk,
         seller,
         raw(
           vault,
-          encodeFunctionData({ abi: vaultV2Abi, functionName: "deposit", args: [50n * USD, seller.address] }),
+          encodeFunctionData({ abi: vaultV2Abi, functionName: "deposit", args: [EARN_DEPOSIT, seller.address] }),
           "Deposit into Earn",
         ),
       );
@@ -161,8 +180,8 @@ export async function liveMorphoScenario(
     return { sellerPositionUSDC: fmt(await sdk.receiptValueOf(seller.address)) };
   });
 
-  await r.step("seed: buyer borrows 20 USDC; the seller borrows what is left so the vault is frozen", async () => {
-    if ((await sdk.position(buyer.address)).debt < 10n * USD) await borrow(buyer, 20n * USD);
+  await r.step(`seed: buyer borrows ${fmt(BUYER_BORROW)} USDC; the seller borrows what is left so the vault is frozen`, async () => {
+    if ((await sdk.position(buyer.address)).debt < BUY + FLASH_BUY) await borrow(buyer, BUYER_BORROW);
     const left = await liquidity(d.earnMarketId as Hex);
     if (left > 0n) await borrow(seller, left);
     const [c, p] = await Promise.all([sdk.capacity(), sdk.position(buyer.address)]);
@@ -180,8 +199,8 @@ export async function liveMorphoScenario(
     return { reclaimed: String(open.length) };
   });
 
-  await r.step("seller opens a Dutch auction for 10 USDC of Earn shares", async () => {
-    const amount = await sdk.receiptAmountFor(10n * USD);
+  await r.step(`seller opens a Dutch auction for ${fmt(SESSION)} USDC of Earn shares`, async () => {
+    const amount = await sdk.receiptAmountFor(SESSION);
     await ensureAllowance(r, sdk, seller, d.receipt, market, maxUint256 >> 1n);
     await send(r, sdk, seller, sdk.openSession(amount, params(100)));
     const s = (await sellerSessions())[0];
@@ -190,9 +209,9 @@ export async function liveMorphoScenario(
     return { sessionId: String(s.id) };
   });
 
-  await r.step("buyer buys 3 USDC of shares with USDC; debt repaid in the same tx; liquidity unchanged", async () => {
+  await r.step(`buyer buys ${fmt(BUY)} USDC of shares with USDC; debt repaid in the same tx; liquidity unchanged`, async () => {
     feeRecipient = await sdk.feeRecipient();
-    const assets = 3n * USD;
+    const assets = BUY;
     const s = await sdk.session(sessionId);
     const price = await sdk.quote(assets, s.discountBps, usdc);
     const [p0, c0, [seller0, fee0]] = await Promise.all([sdk.position(buyer.address), sdk.capacity(), balances(usdc)]);
@@ -212,8 +231,8 @@ export async function liveMorphoScenario(
     };
   });
 
-  await r.step("buyer buys 2 USDC in flash mode with two signatures; collateral to seller; authorization revoked", async () => {
-    const assets = 2n * USD;
+  await r.step(`buyer buys ${fmt(FLASH_BUY)} USDC in flash mode with two signatures; collateral to seller; authorization revoked`, async () => {
+    const assets = FLASH_BUY;
     const s = await sdk.session(sessionId);
     const price = await sdk.quote(assets, s.discountBps, coll);
     const auth = await sdk.signMorphoAuthorization(buyer.wallet, buyer.address);
@@ -235,10 +254,10 @@ export async function liveMorphoScenario(
     return { tx: hash, paidSimAUSD: fmt(price, 18), feeSimAUSD: fmt(fee, 18) };
   });
 
-  await r.step("buyer places a 5% USDC limit bid for up to 3 USDC", async () => {
-    const escrow = await sdk.quote(3n * USD, 500, usdc);
+  await r.step(`buyer places a 5% USDC limit bid for up to ${fmt(BID)} USDC`, async () => {
+    const escrow = await sdk.quote(BID, 500, usdc);
     await ensureAllowance(r, sdk, buyer, usdc, market, escrow);
-    await send(r, sdk, buyer, sdk.placeBid(500, 0, 3n * USD, escrow));
+    await send(r, sdk, buyer, sdk.placeBid(500, 0, BID, escrow));
     const mine = (await sdk.bids()).filter((b) => b.bidder.toLowerCase() === buyer.address.toLowerCase());
     const bid = mine[mine.length - 1];
     check(bid, "bid missing");
@@ -246,8 +265,8 @@ export async function liveMorphoScenario(
     return { bidId: String(bid.id), escrowUSDC: fmt(bid.escrow) };
   });
 
-  await r.step("seller sells 1 USDC of shares now into the bid", async () => {
-    const plan = await sdk.planSellNow(1n * USD, 500, 0b01);
+  await r.step(`seller sells ${fmt(SELL_NOW)} USDC of shares now into the bid`, async () => {
+    const plan = await sdk.planSellNow(SELL_NOW, 500, 0b01);
     const [seller0, fee0] = await balances(usdc);
     const { hash } = await send(r, sdk, seller, sdk.sellNow(plan, 500, 0b01, plan.filledAssets));
     await checkFees(hash, usdc, seller0, fee0);
@@ -255,7 +274,7 @@ export async function liveMorphoScenario(
   });
 
   await r.step("a session already at 6% is matched with the 5% bid", async () => {
-    await send(r, sdk, seller, sdk.openSession(await sdk.receiptAmountFor(1n * USD), params(600)));
+    await send(r, sdk, seller, sdk.openSession(await sdk.receiptAmountFor(MATCH_SESSION), params(600)));
     const s = (await sellerSessions()).find((x) => x.startBps === 600);
     check(s, "second session missing");
     const [seller0, fee0] = await balances(usdc);
@@ -264,21 +283,24 @@ export async function liveMorphoScenario(
     return { tx: hash, feeUSDC: fmt(fee) };
   });
 
-  await r.step("seller deposits 10 USDC into the Selio Vault and sells 1 USDC of shares into its 3% bid", async () => {
-    await ensureAllowance(r, sdk, seller, usdc, d.selioVault, 10n * USD);
-    await send(r, sdk, seller, sdk.vaultDeposit(10n * USD, seller.address, await sdk.vaultPreviewDeposit(10n * USD)));
-    const plan = await sdk.planSellNow(1n * USD, 300, 0b01);
-    check(plan.filledAssets > 0n, "no vault bid");
-    const [seller0, fee0] = await balances(usdc);
-    const { hash } = await send(r, sdk, seller, sdk.sellNow(plan, 300, 0b01, 1n));
-    const fee = await checkFees(hash, usdc, seller0, fee0);
-    const [v, cost] = await Promise.all([
-      sdk.vaultState(seller.address),
-      // At cost: what the vault paid for the receipts its bid bought.
-      sdk.client.readContract({ address: d.selioVault, abi: selioVaultAbi, functionName: "heldCost", args: [0n] }),
-    ]);
-    return { tx: hash, feeUSDC: fmt(fee), vaultHeldUSDC: fmt(cost), vaultTotalUSDC: fmt(v.totalAssets) };
-  });
+  await r.step(
+    `seller deposits ${fmt(VAULT_DEPOSIT)} USDC into the Selio Vault and sells ${fmt(VAULT_SALE)} USDC of shares into its 3% bid`,
+    async () => {
+      await ensureAllowance(r, sdk, seller, usdc, d.selioVault, VAULT_DEPOSIT);
+      await send(r, sdk, seller, sdk.vaultDeposit(VAULT_DEPOSIT, seller.address, await sdk.vaultPreviewDeposit(VAULT_DEPOSIT)));
+      const plan = await sdk.planSellNow(VAULT_SALE, 300, 0b01);
+      check(plan.filledAssets > 0n, "no vault bid");
+      const [seller0, fee0] = await balances(usdc);
+      const { hash } = await send(r, sdk, seller, sdk.sellNow(plan, 300, 0b01, 1n));
+      const fee = await checkFees(hash, usdc, seller0, fee0);
+      const [v, cost] = await Promise.all([
+        sdk.vaultState(seller.address),
+        // At cost: what the vault paid for the receipts its bid bought.
+        sdk.client.readContract({ address: d.selioVault, abi: selioVaultAbi, functionName: "heldCost", args: [0n] }),
+      ]);
+      return { tx: hash, feeUSDC: fmt(fee), vaultHeldUSDC: fmt(cost), vaultTotalUSDC: fmt(v.totalAssets) };
+    },
+  );
 
   await r.step("seller withdraws unsold shares; buyer cancels leftover bids", async () => {
     for (const s of await sellerSessions()) await send(r, sdk, seller, sdk.withdrawUnsold(s.id));

@@ -21,7 +21,7 @@ import {
   type SessionParams,
 } from "@selio/sdk";
 import { FREEZER, LIQUIDITY_HELPER, bidderKit, borrowerKit, refreeze, sellerKit, type KitContext } from "@selio/forkkit";
-import { ensureAllowance, expectRevert, fillTotals, send, type Actor } from "../lib/chain.js";
+import { ensureAllowance, expectRevert, fillTotals, send, vaultKuru, type Actor } from "../lib/chain.js";
 import { check, near, type Recorder } from "../lib/report.js";
 
 const USD = 10n ** 6n;
@@ -154,6 +154,8 @@ export async function morphoScenario(
   let sessionId = 0n;
   let bidId = 0n;
   let feeRecipient = "0x" as Address;
+  /** Sold into the vault's bid: 15,000 USDC of shares, or the Selio bid's share of it while the vault also quotes on Kuru. */
+  let vaultSale = 15_000n * USD;
 
   const seedFlash = opts.seedFlashLiquidity;
   if (seedFlash !== undefined) {
@@ -361,12 +363,18 @@ export async function morphoScenario(
     const v = await sdk.vaultState(a.depositor.address);
     const bid = (await sdk.bids()).find((b) => b.id === v.bidId);
     check(bid, "vault bid missing");
-    near(bid.escrow, 20_000n * USD, 1n, "vault escrow");
-    return { escrowUSDC: fmt(bid.escrow), tooFewShares };
+    // The room under the 20% cap is 20,000 USDC; the vault may quote up to its Kuru share of it on Kuru, the rest in
+    // its Selio bid.
+    const kuru = await vaultKuru(sdk);
+    const room = (v.totalAssets * BigInt(v.maxShareBps)) / 10_000n;
+    near(bid.escrow + kuru.escrow, room, 1n, "vault escrow");
+    check(kuru.escrow <= (room * BigInt(kuru.shareBps)) / 10_000n, `vault quotes ${kuru.escrow} on Kuru`);
+    if (kuru.escrow > 0n) vaultSale = (vaultSale * BigInt(10_000 - kuru.shareBps)) / 10_000n;
+    return { escrowUSDC: fmt(bid.escrow), kuruEscrowUSDC: fmt(kuru.escrow), tooFewShares };
   });
 
-  await r.step("seller sells 15,000 USDC of shares into the vault's bid, re-sized by anyone in between", async () => {
-    const plan = await sdk.planSellNow(15_000n * USD, 300, 0b01);
+  await r.step(`seller sells ${fmt(vaultSale)} USDC of shares into the vault's bid, re-sized by anyone in between`, async () => {
+    const plan = await sdk.planSellNow(vaultSale, 300, 0b01);
     const before = (await sdk.vaultState()).bidId;
     await send(r, sdk, a.keeper, {
       to: d.selioVault,
@@ -380,16 +388,19 @@ export async function morphoScenario(
     await send(r, sdk, a.seller, sdk.sellNow(plan, 300, 0b01, plan.filledAssets));
     const [seller1, fee1] = await Promise.all([bal(usdc, a.seller.address), bal(usdc, feeRecipient)]);
     const got = seller1 - seller0;
-    // The vault pays 14,550 USDC; the 0.2% fee on it is 29.1 USDC.
-    near(got, 14_520_900_000n, 2n, "USDC at 3%");
+    // For 15,000 USDC of shares the vault pays 14,550 USDC; the 0.2% fee on it is 29.1 USDC.
+    const paid = (vaultSale * 97n) / 100n;
+    near(got, paid - (paid * 20n) / 10_000n, 2n, "USDC at 3%");
     check(fee1 - fee0 === (plan.fees[usdc] ?? 0n), "fee not paid to the recipient");
-    const [held, cost] = await Promise.all([
+    const [held, cost, kuru] = await Promise.all([
       sdk.receiptValueOf(d.selioVault),
-      // `heldCost` is what the vault paid for the receipts its bid bought (`heldAssets` is their face value).
+      // `heldCost` is what the vault paid for the receipts its bid bought (`heldAssets` is their face value), plus
+      // what its resting Kuru order could not get back on a cancel.
       sdk.client.readContract({ address: d.selioVault, abi: selioVaultAbi, functionName: "heldCost", args: [0n] }),
+      vaultKuru(sdk),
     ]);
-    near(held, 15_000n * USD, 5n, "vault holdings");
-    near(cost, 14_550n * USD, 2n, "vault holdings at cost");
+    near(held, vaultSale, 5n, "vault holdings");
+    near(cost - kuru.pendingCost, paid, 2n, "vault holdings at cost");
     return {
       receivedUSDC: fmt(got),
       feeUSDC: fmt(fee1 - fee0),
@@ -460,21 +471,32 @@ async function baseYieldSteps(r: Recorder, sdk: SelioClient, kit: KitContext, a:
   await r.step(
     "base yield: a new deposit keeps the bid escrow in cash and the rest in the yield source; a pull-back below 90% reverts",
     async () => {
-      const v0 = await sdk.vaultState();
+      const heldCost = () =>
+        sdk.client.readContract({ address: vault, abi: selioVaultAbi, functionName: "heldCost", args: [0n] });
+      const [v0, cash0, kuru0, cost0] = await Promise.all([sdk.vaultState(), bal(usdc, vault), vaultKuru(sdk), heldCost()]);
       check(v0.yieldSource !== zeroAddress, "the Selio Vault has no yield source");
+      const escrow0 = (await sdk.bids()).find((b) => b.id === v0.bidId)?.escrow ?? 0n;
       await ensureAllowance(r, sdk, a.depositor, usdc, vault, deposit);
       await send(r, sdk, a.depositor, sdk.vaultDeposit(deposit, a.depositor.address, await sdk.vaultPreviewDeposit(deposit)));
-      const [v, cash] = await Promise.all([sdk.vaultState(), bal(usdc, vault)]);
+      const [v, cash, kuru] = await Promise.all([sdk.vaultState(), bal(usdc, vault), vaultKuru(sdk)]);
       const bid = (await sdk.bids()).find((b) => b.id === v.bidId);
       check(bid, "vault bid missing");
-      near(bid.escrow, ((v0.totalAssets + deposit) * BigInt(v.maxShareBps)) / 10_000n, 2n, "vault escrow");
+      // The room under the 20% cap is held by the Selio bid and the vault's Kuru order, never by the source.
+      near(bid.escrow + kuru.escrow, (v.totalAssets * BigInt(v.maxShareBps)) / 10_000n - cost0, 2n, "vault escrow");
       check(cash <= 2n, `cash beyond the bid escrow stayed idle: ${cash}`);
-      near(v.sourceAssets, v.totalAssets - bid.escrow, 2n, "capital in the yield source");
+      // What the deposit brought beyond the escrow went into the yield source.
+      near(
+        v.sourceAssets - v0.sourceAssets,
+        deposit + cash0 + escrow0 + kuru0.escrow - cash - bid.escrow - kuru.escrow,
+        2n,
+        "capital in the yield source",
+      );
       check(v.sourceUtilizationBps < 9_000, `source utilization ${v.sourceUtilizationBps}`);
       const notTight = await expectRevert(sdk, a.keeper, pull);
       check(notTight.startsWith("SourceNotTight"), notTight);
       return {
         escrowUSDC: fmt(bid.escrow),
+        kuruEscrowUSDC: fmt(kuru.escrow),
         inSourceUSDC: fmt(v.sourceAssets),
         sourceUtilization: `${v.sourceUtilizationBps / 100}%`,
         notTight,

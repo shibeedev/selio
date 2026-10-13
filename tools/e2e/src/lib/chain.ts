@@ -5,6 +5,7 @@ import {
   decodeErrorResult,
   http,
   maxUint256,
+  parseAbi,
   parseEventLogs,
   type Abi,
   type Address,
@@ -57,8 +58,35 @@ export interface Actor {
   wallet: WalletClient;
 }
 
+let nextRequestAt = 0;
+
+/**
+ * Spaces requests to a public RPC (Monad's testnet RPC allows 15 per second) and resends the ones its rate limiter
+ * refused: it answers them with JSON-RPC error -32011, which viem does not retry, before executing anything.
+ */
+async function rateLimitedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const now = Date.now();
+    const at = Math.max(now, nextRequestAt);
+    nextRequestAt = at + 100;
+    if (at > now) await new Promise((resolve) => setTimeout(resolve, at - now));
+    const res = await fetch(input, init);
+    if (attempt < 5 && /"code"\s*:\s*-32011/.test(await res.clone().text())) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      continue;
+    }
+    return res;
+  }
+}
+
+/** Local fork nodes take requests as fast as they come; any other RPC gets the rate-limited fetch. */
+function transport(rpcUrl: string) {
+  const local = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(rpcUrl);
+  return http(rpcUrl, { timeout: 120_000, ...(local ? {} : { fetchFn: rateLimitedFetch }) });
+}
+
 export function makeClients(rpcUrl: string, chain: Chain): { publicClient: PublicClient } {
-  const publicClient = createPublicClient({ chain, transport: http(rpcUrl, { timeout: 120_000 }) }) as PublicClient;
+  const publicClient = createPublicClient({ chain, transport: transport(rpcUrl) }) as PublicClient;
   return { publicClient };
 }
 
@@ -67,7 +95,7 @@ export function makeActors(names: string[], rpcUrl: string, chain: Chain, keys: 
     const key = keys[i];
     if (!key) throw new Error(`no key for actor ${name}`);
     const account = privateKeyToAccount(key);
-    const wallet = createWalletClient({ account, chain, transport: http(rpcUrl, { timeout: 120_000 }) });
+    const wallet = createWalletClient({ account, chain, transport: transport(rpcUrl) });
     return { name, account, address: account.address, wallet };
   });
 }
@@ -158,6 +186,29 @@ export async function fillTotals(
     totals.fee += args.fee;
   }
   return totals;
+}
+
+const vaultKuruAbi = parseAbi([
+  "function kuruShareBps() view returns (uint16)",
+  "function kuruLeg(uint256 i) view returns (address book, address margin, address wrapper, uint40 orderId, uint32 price, uint96 placedSize, uint256 escrow, uint256 baseAtPlace)",
+  "function kuruOrderState(uint256 i) view returns (bool active, uint96 remainingSize, uint256 refundValue, uint256 pendingCost)",
+]);
+
+/**
+ * The Selio Vault's Kuru leg on strategy 0: its Kuru order book (zero when the strategy has none), the quote its
+ * resting order debited, the part of that quote a cancel would not return (counted in `heldCost`), and the share of
+ * the vault's room under the cap it may quote on Kuru.
+ */
+export async function vaultKuru(
+  sdk: SelioClient,
+): Promise<{ book: Address; escrow: bigint; pendingCost: bigint; shareBps: number }> {
+  const vault = sdk.deployment.selioVault;
+  const [leg, state, shareBps] = await Promise.all([
+    sdk.client.readContract({ address: vault, abi: vaultKuruAbi, functionName: "kuruLeg", args: [0n] }),
+    sdk.client.readContract({ address: vault, abi: vaultKuruAbi, functionName: "kuruOrderState", args: [0n] }),
+    sdk.client.readContract({ address: vault, abi: vaultKuruAbi, functionName: "kuruShareBps" }),
+  ]);
+  return { book: leg[0], escrow: leg[6], pendingCost: state[3], shareBps };
 }
 
 /** Simulates `tx` and returns the decoded revert reason; throws when the call succeeds. Never sends. */
