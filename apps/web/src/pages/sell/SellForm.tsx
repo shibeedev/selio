@@ -140,6 +140,10 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
     (mode === "now" ? !!(preview && previewFilled > 0n && validAssets) : !!(validAssets && params));
   // A failed routed sale (Kuru paused, paying less than planned) can still go to Selio's bids alone.
   const offerSelioOnly = useKuru && mode === "now" && runner.state.outcome === "failed" && !!preview?.routed?.kuru;
+  const sellOnSelioOnly = () => {
+    setSelioOnly(true);
+    runner.reset();
+  };
 
   const chooseMode = (next: Mode) => {
     setMode(next);
@@ -211,7 +215,9 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
                     ? kuru.data.best
                       ? `Kuru best bid: ${formatBps(kuru.data.best.discountBps)} discount, ${formatToken(kuru.data.best.faceAssets, U)}`
                       : "Kuru best bid: none yet"
-                    : "Kuru best bid: …"}
+                    : kuru.error != null
+                      ? "Kuru best bid: unavailable"
+                      : "Kuru best bid: …"}
                 </span>
               )}
             </span>
@@ -260,10 +266,8 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
             bids={market.data?.bids}
             useKuru={useKuru}
             onPlan={setPreview}
-            onSelioOnly={() => {
-              setSelioOnly(true);
-              runner.reset();
-            }}
+            // Only one "Sell on Selio only" button at a time: the failed sale's offer below takes precedence.
+            onSelioOnly={offerSelioOnly ? undefined : sellOnSelioOnly}
           />
         ) : (
           <AuctionSettings
@@ -294,10 +298,7 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
           <button
             type="button"
             className="btn btn--secondary self-start"
-            onClick={() => {
-              setSelioOnly(true);
-              runner.reset();
-            }}
+            onClick={sellOnSelioOnly}
             data-testid="sell-selio-only"
           >
             Sell on Selio only
