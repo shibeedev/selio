@@ -81,35 +81,6 @@ export function Cross(props: IconProps) {
   );
 }
 
-export function Lock(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <rect x="4" y="10" width="16" height="11" rx="2" />
-      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-    </Svg>
-  );
-}
-
-export function FlowArrow() {
-  return (
-    <svg
-      className="flow-arrow"
-      width="44"
-      height="24"
-      viewBox="0 0 44 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 12h38" />
-      <path d="M32 5l8 7-8 7" />
-    </svg>
-  );
-}
-
 export function PathIcon({ d, size = 22 }: { d: string; size?: number }) {
   return (
     <Svg size={size}>

@@ -6,7 +6,7 @@ export function Footer() {
   return (
     <footer className="site-footer">
       <div className="container footer-inner">
-        <span>Selio · the exit market for frozen lending pools</span>
+        <span>Selio · the exit market for high-utilization lending pools</span>
         <span className="footer-links">
           <a href={hrefFor("developers")} data-testid="footer-developers">
             Developers
