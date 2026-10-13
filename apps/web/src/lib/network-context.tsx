@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { createPublicClient, http, type PublicClient } from "viem";
+import { createPublicClient, type PublicClient } from "viem";
 import { NETWORKS, SelioClient, type NetworkInfo, type NetworkKey } from "@selio/sdk";
 import { loadDeployment, type DeploymentState } from "./deployment";
 import { rpcEnvName, rpcUrlFor } from "./env";
 import { readStorage, useAsync, writeStorage, type AsyncState } from "./hooks";
 import { loadMarketMeta, type MarketMeta } from "./market";
 import { DEFAULT_NETWORK, isNetworkKey } from "./networks";
+import { rpcTransport } from "./rpc";
 
 export interface NetworkContextValue {
   key: NetworkKey;
@@ -45,11 +46,11 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     () =>
       createPublicClient({
         chain: info.chain,
-        transport: http(rpcUrl),
+        transport: rpcTransport(key, rpcUrl),
         batch: info.chain.contracts?.multicall3 ? { multicall: true } : undefined,
         pollingInterval: info.isFork ? 1_000 : 2_000,
       }) as PublicClient,
-    [info, rpcUrl],
+    [key, info, rpcUrl],
   );
 
   useEffect(() => {

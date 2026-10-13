@@ -3,7 +3,6 @@ import {
   createWalletClient,
   custom,
   getAddress,
-  http,
   type Account,
   type Address,
   type Chain,
@@ -17,6 +16,7 @@ import { dynamicEnvironmentId } from "./env";
 import { describeError } from "./errors";
 import { readStorage, writeStorage } from "./hooks";
 import { useNetwork } from "./network-context";
+import { rpcTransport } from "./rpc";
 
 /** The Dynamic SDK loads on first use only, so it stays out of the initial bundle. */
 export const loadDynamic = () => import("./dynamic");
@@ -180,7 +180,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const walletClient = useMemo<ConnectedWalletClient | null>(() => {
     if (kind === "demo" && demoAccount) {
       // The burner signs locally and sends through the network's RPC.
-      return createWalletClient({ account: demoAccount, chain: info.chain, transport: http(rpcUrl) });
+      return createWalletClient({ account: demoAccount, chain: info.chain, transport: rpcTransport(info.key, rpcUrl) });
     }
     if (kind === "injected" && injectedAddress && provider) {
       return createWalletClient({ account: injectedAddress, chain: info.chain, transport: custom(provider) });
