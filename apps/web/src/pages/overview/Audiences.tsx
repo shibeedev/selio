@@ -14,7 +14,7 @@ const AUDIENCES: { who: string; does: string; gets: string; cta: string; route: 
   {
     who: "Borrowers of the same asset",
     does: "Buy receipts below face value and repay your debt with them in one transaction, even with no cash on hand.",
-    gets: "Repay for less, and your health factor only goes up.",
+    gets: "Repay for less; the purchase reverts if your health factor would go down.",
     cta: "Repay at a discount",
     route: "buy",
     tone: "info",
@@ -23,7 +23,7 @@ const AUDIENCES: { who: string; does: string; gets: string; cta: string; route: 
   {
     who: "Discount buyers",
     does: "Deposit into the Selio Vault, or place limit bids at your own discount.",
-    gets: "Base yield while you wait. When a pool freezes, you buy receipts below face value and redeem them at full value once it refills. Withdraw or cancel anytime.",
+    gets: "Base yield while you wait in the Selio Vault; a limit bid's escrow earns nothing until it fills. When a pool freezes, you buy receipts below face value and redeem them at full value once it refills. Withdraw or cancel anytime.",
     cta: "Start earning",
     route: "earn",
     tone: "good",

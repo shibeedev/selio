@@ -4,7 +4,7 @@ const BULLETS: { tone: "danger" | "info" | "good" | "neutral"; who: string; text
   {
     tone: "good",
     who: "Everyone",
-    text: "can deposit into the Selio Vault or place limit bids to earn base yield; when a pool freezes, that capital buys stuck receipts below face value and redeems them at full value when the pool refills, to earn extra.",
+    text: "can deposit into the Selio Vault, which earns base yield while it waits, or place limit bids; when a pool freezes, that capital buys stuck receipts below face value and redeems them at full value when the pool refills.",
   },
   {
     tone: "neutral",

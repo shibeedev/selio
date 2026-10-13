@@ -17,8 +17,9 @@ export function EarnPage() {
       <section className="page-head" aria-labelledby="h-earn">
         <h1 id="h-earn">Earn from frozen pools</h1>
         <p className="lead">
-          Your capital earns base yield while it waits. When a pool freezes, it buys stuck receipts below face value and redeems
-          them at full value once the pool refills. Use the shared Selio Vault, or set your own limit bids.
+          When a pool freezes, your capital buys stuck receipts below face value and redeems them at full value once the pool
+          refills. Use the shared Selio Vault, whose waiting capital earns base yield, or set your own limit bids, whose escrow
+          earns nothing until they fill.
         </p>
       </section>
       <DeploymentGate>{({ selio, meta }) => <EarnBody selio={selio} meta={meta} />}</DeploymentGate>
