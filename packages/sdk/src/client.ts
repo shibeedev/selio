@@ -1,4 +1,5 @@
 import {
+  decodeFunctionResult,
   encodeAbiParameters,
   encodeFunctionData,
   keccak256,
@@ -15,23 +16,43 @@ import {
   aaveExitMarketAbi,
   aavePoolAbi,
   erc20Abi,
+  kuruMarginAccountAbi,
+  kuruOrderBookAbi,
+  kuruSellRouterAbi,
   morphoAbi,
   morphoAdapterAbi,
   selioVaultAbi,
+  stataTokenAbi,
   vaultV2Abi,
 } from "./abis/index.js";
+import {
+  decodeL2Bids,
+  displacedValue,
+  kuruBaseAmount,
+  kuruBaseForFace,
+  kuruDiscountOfPrice,
+  kuruLevels,
+  kuruMinOut,
+  mergeRoute,
+  selioNetValue,
+  type SelioCandidate,
+} from "./kuru.js";
 import type { Deployment } from "./networks.js";
 import type {
   BidView,
   BorrowerPosition,
   CapacityView,
+  KuruLevel,
+  KuruMarketInfo,
   MorphoMarketParams,
+  RoutedSellPlan,
   SellerQuote,
   SellPlan,
   SessionParams,
   SessionView,
   TokenInfo,
   UnsignedTx,
+  VaultKuruView,
 } from "./types.js";
 
 export const BPS = 10_000n;
@@ -114,6 +135,8 @@ export function morphoMarketId(mp: MorphoMarketParams): Hex {
   return keccak256(encodeAbiParameters([MARKET_PARAMS_TUPLE], [mp]));
 }
 
+const candidateOf = (b: BidView): SelioCandidate => ({ discountBps: b.minDiscountBps, capacity: b.capacityAssets });
+
 /**
  * Read and transaction-building client for one Selio deployment. Every write method returns an
  * unsigned transaction; signing is left to the caller's wallet.
@@ -122,6 +145,7 @@ export class SelioClient {
   private tokenCache = new Map<Address, TokenInfo>();
   private morphoMarketCache?: { id: Hex; params: MorphoMarketParams }[];
   private feeBpsCache?: number;
+  private kuruMarketCache?: Promise<KuruMarketInfo>;
 
   constructor(
     readonly deployment: Deployment,
@@ -481,11 +505,22 @@ export class SelioClient {
 
   // ---------- Planning ----------
 
-  /** Best-price-first plan for selling `assets` into escrowed bids up to `maxDiscountBps`. */
-  async planSellNow(assets: bigint, maxDiscountBps: number, payMask: number): Promise<SellPlan> {
-    const bids = (await this.bids()).filter(
+  /** Bids a seller accepting up to `maxDiscountBps` in the `payMask` tokens can sell into, best price first. */
+  private async sellCandidates(maxDiscountBps: number, payMask: number): Promise<BidView[]> {
+    return (await this.bids()).filter(
       (b) => b.minDiscountBps <= maxDiscountBps && ((payMask >> b.payIdx) & 1) === 1 && b.capacityAssets > 0n,
     );
+  }
+
+  /** Best-price-first plan for selling `assets` into escrowed bids up to `maxDiscountBps`. */
+  async planSellNow(assets: bigint, maxDiscountBps: number, payMask: number): Promise<SellPlan> {
+    const bids = await this.sellCandidates(maxDiscountBps, payMask);
+    const feeBps = await this.feeBps();
+    return this.sellPlanOf(bids, mergeRoute(assets, bids.map(candidateOf), [], feeBps).selio);
+  }
+
+  /** The fills of `takes[i]` face value from `bids[i]`, quoted by the market, with Selio's fee per fill. */
+  private async sellPlanOf(bids: BidView[], takes: bigint[]): Promise<SellPlan> {
     const plan: SellPlan = {
       bidIds: [],
       fills: [],
@@ -497,10 +532,9 @@ export class SelioClient {
     };
     const feeBps = BigInt(await this.feeBps());
     let weighted = 0n;
-    for (const b of bids) {
-      if (plan.filledAssets >= assets) break;
-      const left = assets - plan.filledAssets;
-      const f = b.capacityAssets < left ? b.capacityAssets : left;
+    for (const [i, b] of bids.entries()) {
+      const f = takes[i] ?? 0n;
+      if (f === 0n) continue;
       const pay = await this.quote(f, b.minDiscountBps, b.payToken);
       const fee = (pay * feeBps) / BPS;
       const net = pay - fee;
@@ -660,6 +694,7 @@ export class SelioClient {
       shares = await this.balanceOf(v, account);
       preview = await this.client.readContract({ address: v, abi: selioVaultAbi, functionName: "previewRedeem", args: [shares] });
     }
+    const kuru = this.deployment.kuruMarket ? await this.vaultKuru(account) : undefined;
     return {
       totalAssets,
       idleAssets,
@@ -680,6 +715,8 @@ export class SelioClient {
       sourceUtilizationBps,
       /** Source shares the redemption would pay in kind because the source cannot pay them now. */
       redeemSourceInKind: preview[2],
+      /** The vault's standing bid on the Kuru book, on networks with a Kuru market. */
+      kuru,
     };
   }
 
@@ -764,6 +801,309 @@ export class SelioClient {
       }),
       "Swap frozen collateral for new collateral by selling it into bids",
     );
+  }
+
+  // ---------- Kuru ----------
+
+  /** The Kuru order-book market of this deployment's receipt (or of its static wrapper); cached per instance. */
+  async kuruMarket(): Promise<KuruMarketInfo> {
+    const { book, wrapper } = this.requireKuru();
+    this.kuruMarketCache ??= this.readKuruMarket(book, wrapper).catch((err: unknown) => {
+      this.kuruMarketCache = undefined;
+      throw err;
+    });
+    return this.kuruMarketCache;
+  }
+
+  private async readKuruMarket(book: Address, wrapper: Address): Promise<KuruMarketInfo> {
+    const [pricePrecision, sizePrecision, base, , quote, , tickSize, minSize, maxSize, takerFeeBps, makerFeeBps] =
+      await this.client.readContract({ address: book, abi: kuruOrderBookAbi, functionName: "getMarketParams" });
+    const [baseInfo, quoteInfo] = await Promise.all([this.token(base), this.token(quote)]);
+    return {
+      book,
+      base: baseInfo,
+      quote: quoteInfo,
+      wrapper,
+      pricePrecision,
+      sizePrecision,
+      tickSize,
+      minSize,
+      maxSize,
+      takerFeeBps: Number(takerFeeBps),
+      makerFeeBps: Number(makerFeeBps),
+    };
+  }
+
+  /** Underlying value (wei) of one whole Kuru base unit: the wrapper's assets per share, or the vault share's value. */
+  async kuruFacePerBase(): Promise<bigint> {
+    const m = await this.kuruMarket();
+    const one = 10n ** BigInt(m.base.decimals);
+    if (m.wrapper !== zeroAddress) {
+      return this.client.readContract({ address: m.wrapper, abi: stataTokenAbi, functionName: "convertToAssets", args: [one] });
+    }
+    return this.client.readContract({
+      address: this.deployment.receipt,
+      abi: vaultV2Abi,
+      functionName: "previewRedeem",
+      args: [one],
+    });
+  }
+
+  /** Kuru bid levels, best first, each with its discount below face and its face value (order-book orders only). */
+  async kuruBook(levels = 50): Promise<KuruLevel[]> {
+    const [m, face] = await Promise.all([this.kuruMarket(), this.kuruFacePerBase()]);
+    return this.kuruBookAt(m, face, levels);
+  }
+
+  private async kuruBookAt(m: KuruMarketInfo, face: bigint, levels: number): Promise<KuruLevel[]> {
+    const data = await this.client.readContract({
+      address: m.book,
+      abi: kuruOrderBookAbi,
+      functionName: "getL2Book",
+      args: [levels, 0],
+    });
+    return kuruLevels(decodeL2Bids(data), face, m);
+  }
+
+  /**
+   * Exact underlying a Kuru market sell of `baseAmount` pays now, net of Kuru's taker fee and including Kuru's AMM
+   * vault: an eth_call from the zero address, which Kuru executes without moving tokens.
+   */
+  async kuruSellQuote(baseAmount: bigint): Promise<{ size: bigint; quoteOut: bigint }> {
+    const m = await this.kuruMarket();
+    const size = (baseAmount * m.sizePrecision) / 10n ** BigInt(m.base.decimals);
+    if (size === 0n) return { size, quoteOut: 0n };
+    const { data } = await this.client.call({
+      account: zeroAddress,
+      to: m.book,
+      data: encodeFunctionData({
+        abi: kuruOrderBookAbi,
+        functionName: "placeAndExecuteMarketSell",
+        args: [size, 0n, false, false],
+      }),
+    });
+    const quoteOut = data
+      ? decodeFunctionResult({ abi: kuruOrderBookAbi, functionName: "placeAndExecuteMarketSell", data })
+      : 0n;
+    return { size, quoteOut };
+  }
+
+  /**
+   * Sell now split between Selio's bids and the Kuru book: each unit of face value goes to whichever pays the seller
+   * more net of fees (Selio on ties), and the Kuru leg must pay strictly more than the Selio bids it displaces, or it
+   * is dropped. A plan whose route is "selio" is sent with the plain `sellNow`.
+   */
+  async planRoutedSell(assets: bigint, maxDiscountBps: number, payMask: number, slippageBps = 50): Promise<RoutedSellPlan> {
+    const m = await this.kuruMarket();
+    const [bids, face, feeBps] = await Promise.all([
+      this.sellCandidates(maxDiscountBps, payMask),
+      this.kuruFacePerBase(),
+      this.feeBps(),
+    ]);
+    const inputs = { assets, bids, face, feeBps, slippageBps, m, maxDiscountBps, payMask };
+    const levels = (await this.kuruBookAt(m, face, 50)).filter((l) => l.discountBps <= maxDiscountBps);
+    return (await this.routedPlan(inputs, levels)) ?? (await this.routedPlan(inputs, [])) as RoutedSellPlan;
+  }
+
+  /** The routed plan over `levels`; null when its Kuru leg would not pay more than the Selio bids it displaces. */
+  private async routedPlan(
+    p: {
+      assets: bigint;
+      bids: BidView[];
+      face: bigint;
+      feeBps: number;
+      slippageBps: number;
+      m: KuruMarketInfo;
+      maxDiscountBps: number;
+      payMask: number;
+    },
+    levels: KuruLevel[],
+  ): Promise<RoutedSellPlan | null> {
+    const candidates = p.bids.map(candidateOf);
+    const takes = mergeRoute(p.assets, candidates, levels, p.feeBps);
+    const kuruFace = takes.kuru.reduce((sum, t) => sum + t, 0n);
+    let kuru: RoutedSellPlan["kuru"] = null;
+    if (kuruFace > 0n) {
+      const baseAmount = kuruBaseForFace(kuruFace, p.face, p.m);
+      const { size, quoteOut } = await this.kuruSellQuote(baseAmount);
+      const unused = candidates.map((c, i) => c.capacity - (takes.selio[i] ?? 0n));
+      const displaced = displacedValue(kuruFace, candidates, unused, p.feeBps);
+      if (size === 0n || quoteOut <= displaced) return null;
+      const one = 10n ** BigInt(p.m.base.decimals);
+      kuru = {
+        // Aave: aTokens to wrap into at least `baseAmount` shares. Morpho: the shares' face value.
+        receiptAssets: p.m.wrapper !== zeroAddress ? (baseAmount * p.face + one - 1n) / one + 1n : kuruFace,
+        baseAmount,
+        size,
+        expectedOut: quoteOut,
+        minOut: kuruMinOut(quoteOut, displaced, p.slippageBps),
+        displacedValue: displaced,
+        levels: levels.flatMap((l, k) => {
+          const faceAssets = takes.kuru[k] ?? 0n;
+          return faceAssets > 0n ? [{ price: l.price, faceAssets }] : [];
+        }),
+      };
+    }
+    const selio = await this.sellPlanOf(p.bids, takes.selio);
+    const filledAssets = selio.filledAssets + (kuru ? kuruFace : 0n);
+    let weighted = 0n;
+    let netValue = kuru?.expectedOut ?? 0n;
+    for (const f of selio.fills) {
+      weighted += f.assets * BigInt(f.discountBps);
+      netValue += selioNetValue(f.assets, f.discountBps, p.feeBps);
+    }
+    if (kuru) {
+      for (const [k, l] of levels.entries()) weighted += (takes.kuru[k] ?? 0n) * BigInt(l.discountBps);
+    }
+    return {
+      selio,
+      kuru,
+      filledAssets,
+      route: kuru === null ? "selio" : selio.filledAssets === 0n ? "kuru" : "selio+kuru",
+      averageDiscountBps: filledAssets === 0n ? 0 : Number(weighted / filledAssets),
+      netValue,
+      maxDiscountBps: p.maxDiscountBps,
+      payMask: p.payMask,
+    };
+  }
+
+  /** Receipts the seller approves to KuruSellRouter for `plan`: Aave values plus 10 wei per transfer, Morpho shares. */
+  async routedSellApproval(plan: RoutedSellPlan): Promise<bigint> {
+    const fills = BigInt(plan.selio.fills.length);
+    const total = plan.selio.filledAssets + (plan.kuru?.receiptAssets ?? 0n);
+    if (this.deployment.venue === "aave") return total + 10n * (fills + 2n);
+    return (await this.receiptAmountFor(total)) + fills + 1n;
+  }
+
+  /** Routed sale of `plan` through KuruSellRouter; proceeds and every leftover go to `to`. */
+  routedSell(plan: RoutedSellPlan, to: Address): UnsignedTx {
+    const { router } = this.requireKuru();
+    return this.tx(
+      router,
+      encodeFunctionData({
+        abi: kuruSellRouterAbi,
+        functionName: "sell",
+        args: [
+          {
+            selioAssets: plan.selio.filledAssets,
+            bidIds: plan.selio.bidIds,
+            maxDiscountBps: plan.maxDiscountBps,
+            payMask: plan.payMask,
+            selioMinFilled: plan.selio.filledAssets,
+            kuruAssets: plan.kuru?.receiptAssets ?? 0n,
+            kuruMinOut: plan.kuru?.minOut ?? 0n,
+            to,
+          },
+        ],
+      }),
+      "Sell receipts now: Selio bids and the Kuru order book, best price per unit",
+    );
+  }
+
+  kuruDeposit(token: Address, user: Address, amount: bigint): UnsignedTx {
+    const { margin } = this.requireKuru();
+    return this.tx(
+      margin,
+      encodeFunctionData({ abi: kuruMarginAccountAbi, functionName: "deposit", args: [user, token, amount] }),
+      "Deposit into your Kuru margin account so an order can use it",
+    );
+  }
+
+  /** A limit bid at `price` (pricePrecision units) for `size` (sizePrecision units); post-only by default. */
+  kuruPlaceBid(price: number, size: bigint, postOnly = true): UnsignedTx {
+    const { book } = this.requireKuru();
+    return this.tx(
+      book,
+      encodeFunctionData({ abi: kuruOrderBookAbi, functionName: "addBuyOrder", args: [price, size, postOnly] }),
+      "Place a limit bid for receipts on the Kuru order book",
+    );
+  }
+
+  kuruCancel(orderIds: bigint[]): UnsignedTx {
+    const { book } = this.requireKuru();
+    return this.tx(
+      book,
+      encodeFunctionData({
+        abi: kuruOrderBookAbi,
+        functionName: "batchCancelOrdersNoRevert",
+        args: [orderIds.map((id) => Number(id))],
+      }),
+      "Cancel your Kuru bids; unused funds return to your Kuru margin account",
+    );
+  }
+
+  kuruWithdraw(token: Address, amount: bigint): UnsignedTx {
+    const { margin } = this.requireKuru();
+    return this.tx(
+      margin,
+      encodeFunctionData({ abi: kuruMarginAccountAbi, functionName: "withdraw", args: [amount, token] }),
+      "Withdraw from your Kuru margin account to your wallet",
+    );
+  }
+
+  /** The Selio Vault's standing Kuru bid and, with an account, its claim on the vault's Kuru position. */
+  private async vaultKuru(account?: Address): Promise<VaultKuruView> {
+    const v = this.deployment.selioVault;
+    const [m, face, leg, state] = await Promise.all([
+      this.kuruMarket(),
+      this.kuruFacePerBase(),
+      this.client.readContract({ address: v, abi: selioVaultAbi, functionName: "kuruLeg", args: [0n] }),
+      this.client.readContract({ address: v, abi: selioVaultAbi, functionName: "kuruOrderState", args: [0n] }),
+    ]);
+    const [, , , orderId, price, , escrow] = leg;
+    const [, remainingSize, , pendingCost] = state;
+    let claimable: VaultKuruView["claimable"] = null;
+    if (account) {
+      const [, wad] = await this.client.readContract({
+        address: v,
+        abi: selioVaultAbi,
+        functionName: "kuruClaimOf",
+        args: [account, 0n],
+      });
+      if (wad > 0n) {
+        claimable = { wad, resolved: false, cash: 0n, receipts: 0n };
+        try {
+          // Pays only once the claim's epoch resolved; reverts NothingToClaim before that.
+          const { result } = await this.client.simulateContract({
+            account,
+            address: v,
+            abi: selioVaultAbi,
+            functionName: "claimKuru",
+            args: [0n, account],
+          });
+          claimable = { wad, resolved: true, cash: result[0], receipts: result[1] };
+        } catch {
+          // Not resolved yet.
+        }
+      }
+    }
+    return {
+      orderId: BigInt(orderId),
+      price,
+      discountBps: price === 0 ? 0 : kuruDiscountOfPrice(price, face, m),
+      remainingSize,
+      faceAssets: (kuruBaseAmount(remainingSize, m) * face) / 10n ** BigInt(m.base.decimals),
+      escrow,
+      pendingCost,
+      claimable,
+    };
+  }
+
+  vaultClaimKuru(receiver: Address): UnsignedTx {
+    return this.tx(
+      this.deployment.selioVault,
+      encodeFunctionData({ abi: selioVaultAbi, functionName: "claimKuru", args: [0n, receiver] }),
+      "Claim your share of the vault's Kuru position, set aside while Kuru was unreachable",
+    );
+  }
+
+  /** The deployment's Kuru addresses; throws on a network without a Kuru market. */
+  private requireKuru(): { book: Address; router: Address; margin: Address; wrapper: Address } {
+    const d = this.deployment;
+    if (!d.kuruMarket || !d.kuruSellRouter || !d.kuruMarginAccount) {
+      throw new Error("Kuru is not configured on this network");
+    }
+    return { book: d.kuruMarket, router: d.kuruSellRouter, margin: d.kuruMarginAccount, wrapper: d.kuruWrapper ?? zeroAddress };
   }
 
   // ---------- Simulation ----------

@@ -25,5 +25,6 @@ for (const [name, exportName] of contracts) {
   index.push(`export { ${exportName} } from "./${name}.js";`);
 }
 index.push(`export * from "./external.js";`);
+index.push(`export * from "./kuru.js";`);
 writeFileSync(join(out, "index.ts"), index.join("\n") + "\n");
 console.log(`exported ${contracts.length} ABIs to ${out}`);

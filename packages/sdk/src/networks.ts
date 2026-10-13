@@ -78,7 +78,27 @@ export interface Deployment {
   collateral?: Address;
   earnMarketId?: Hex;
   flashMarketId?: Hex;
+  // Kuru (monad-testnet and usdt0-replay): all six or none
+  kuruRouter?: Address;
+  kuruMarginAccount?: Address;
+  kuruMarket?: Address;
+  /** Token the Kuru market trades: the receipt itself, or its static wrapper. */
+  kuruBase?: Address;
+  /** Aave static aToken wrapper of the receipt; the zero address when the market trades the receipt. */
+  kuruWrapper?: Address;
+  kuruSellRouter?: Address;
 }
+
+const KURU_KEYS = [
+  "kuruRouter",
+  "kuruMarginAccount",
+  "kuruMarket",
+  "kuruBase",
+  "kuruWrapper",
+  "kuruSellRouter",
+] as const;
+
+const isAddressString = (value: unknown): boolean => typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
 
 const REQUIRED = [
   "network",
@@ -102,6 +122,9 @@ export function parseDeployment(raw: unknown): Deployment {
   if (d.venue === "aave" && (!d.aavePool || !d.debtToken)) throw new Error("deployment: aave fields missing");
   if (d.venue === "morpho" && (!d.morpho || !d.earnVault || !d.adapter)) {
     throw new Error("deployment: morpho fields missing");
+  }
+  if (KURU_KEYS.some((key) => d[key] !== undefined) && !KURU_KEYS.every((key) => isAddressString(d[key]))) {
+    throw new Error(`deployment ${String(d.network)}: missing kuru keys`);
   }
   return d as unknown as Deployment;
 }

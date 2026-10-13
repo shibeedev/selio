@@ -6,3 +6,4 @@ export { priceRouterAbi } from "./PriceRouter.js";
 export { testTokenAbi } from "./TestToken.js";
 export { kuruSellRouterAbi } from "./KuruSellRouter.js";
 export * from "./external.js";
+export * from "./kuru.js";
