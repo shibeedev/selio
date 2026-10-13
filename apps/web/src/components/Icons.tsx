@@ -24,7 +24,7 @@ function Svg({ size = 18, viewBox = "0 0 24 24", className, children }: IconProp
   );
 }
 
-/** The Selio logo: the purple "S" on a dark glass tile (public/logo-192.png, derived from logo.png). */
+/** The Selio logo: the purple "S" on a white-to-lavender glass tile (public/logo-192.png, derived from logo.png). */
 export function LogoMark({ size = 30 }: { size?: number }) {
   return (
     <img
