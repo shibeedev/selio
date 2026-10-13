@@ -260,6 +260,10 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
             bids={market.data?.bids}
             useKuru={useKuru}
             onPlan={setPreview}
+            onSelioOnly={() => {
+              setSelioOnly(true);
+              runner.reset();
+            }}
           />
         ) : (
           <AuctionSettings

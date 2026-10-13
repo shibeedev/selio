@@ -55,6 +55,7 @@ export function SellNowPreview({
   bids,
   useKuru,
   onPlan,
+  onSelioOnly,
 }: {
   selio: SelioClient;
   meta: MarketMeta;
@@ -63,6 +64,8 @@ export function SellNowPreview({
   /** Plan through the Kuru book as well (Kuru networks, unless the seller chose Selio only). */
   useKuru: boolean;
   onPlan: (plan: PreviewPlan | null) => void;
+  /** Falls back to Selio's bids alone when the Kuru book cannot be planned. */
+  onSelioOnly?: () => void;
 }) {
   const U = meta.underlying;
   const mask = allPayMask(meta.payTokens.length);
@@ -85,9 +88,16 @@ export function SellNowPreview({
 
   if (plan.error) {
     return (
-      <Notice tone="danger">
-        Can't plan the sale{useKuru ? " across Selio and Kuru" : ""}: {describeError(plan.error)}
-      </Notice>
+      <div className="stack-sm">
+        <Notice tone="danger">
+          Can't plan the sale{useKuru ? " across Selio and Kuru" : ""}: {describeError(plan.error)}
+        </Notice>
+        {useKuru && onSelioOnly && (
+          <button type="button" className="btn btn--secondary self-start" onClick={onSelioOnly} data-testid="sell-selio-only">
+            Sell on Selio only
+          </button>
+        )}
+      </div>
     );
   }
 
