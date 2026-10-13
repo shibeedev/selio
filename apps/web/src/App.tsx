@@ -9,6 +9,7 @@ import { BuyPage } from "./pages/buy/BuyPage";
 import { DevelopersPage } from "./pages/developers/DevelopersPage";
 import { EarnPage } from "./pages/earn/EarnPage";
 import { FrozenPage } from "./pages/frozen/FrozenPage";
+import { HistoryPage } from "./pages/history/HistoryPage";
 import { OverviewPage } from "./pages/overview/OverviewPage";
 import { SellPage } from "./pages/sell/SellPage";
 
@@ -19,6 +20,7 @@ const PAGES: Record<Route, ComponentType> = {
   buy: BuyPage,
   earn: EarnPage,
   frozen: FrozenPage,
+  history: HistoryPage,
   developers: DevelopersPage,
 };
 

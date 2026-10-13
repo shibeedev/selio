@@ -1,5 +1,5 @@
 import { isAddressEqual, type Address } from "viem";
-import type { BidView, SelioClient, SessionView } from "@selio/sdk";
+import type { BidView, IndexerClient, SelioClient, SessionView } from "@selio/sdk";
 import { Chip, Notice } from "../../components/ui";
 import { TxStatus } from "../../components/TxStatus";
 import { describeError } from "../../lib/errors";
@@ -7,6 +7,7 @@ import { formatFillAmounts } from "../../lib/fees";
 import { formatBps, formatToken } from "../../lib/format";
 import { loadSellerHistory, summarizeFills, type FillSummary, type SellerFill } from "../../lib/history";
 import { useAsync } from "../../lib/hooks";
+import { HISTORY_POLL_MS, indexerSellerHistory, useIndexer, useIndexerStatus } from "../../lib/indexer";
 import { receiptNoun, type MarketMeta } from "../../lib/market";
 import { useNetwork } from "../../lib/network-context";
 import { maskIncludes } from "../../lib/paymask";
@@ -46,7 +47,7 @@ function Received({ summary, meta, testid }: { summary: FillSummary; meta: Marke
 
 /** The seller's auctions and sell-now fills, with what each paid net of the fee. */
 export function YourSales({ selio, meta }: { selio: SelioClient; meta: MarketMeta }) {
-  const { refreshKey } = useNetwork();
+  const { info, refreshKey } = useNetwork();
   const wallet = useWallet();
   const address = wallet.address;
   const runner = useTxRunner();
@@ -60,10 +61,22 @@ export function YourSales({ selio, meta }: { selio: SelioClient; meta: MarketMet
     [selio, address],
     { enabled: !!address, pollMs: 15_000, reloadKey: refreshKey },
   );
-  const history = useAsync(() => loadSellerHistory(selio, address as Address), [selio, address], {
-    enabled: !!address,
-    reloadKey: refreshKey,
-  });
+  // The public Monad testnet RPC serves logs 100 blocks at a time, so an indexed network reads sold and
+  // received amounts from the Selio event index; the forks keep reading their own logs.
+  const indexer = useIndexer();
+  const index = useIndexerStatus();
+  const history = useAsync(
+    () =>
+      info.indexed
+        ? indexerSellerHistory(indexer as IndexerClient, selio.market, address as Address)
+        : loadSellerHistory(selio, address as Address),
+    [selio, address, indexer],
+    {
+      enabled: !!address && (!info.indexed || indexer !== null),
+      pollMs: info.indexed ? HISTORY_POLL_MS : undefined,
+      reloadKey: refreshKey,
+    },
+  );
 
   if (!address) return null;
 
@@ -101,10 +114,18 @@ export function YourSales({ selio, meta }: { selio: SelioClient; meta: MarketMet
         Your sales
       </h2>
       {sales.error != null && <Notice tone="danger">Can't read your auctions: {describeError(sales.error)}</Notice>}
-      {history.error != null && (
-        <p className="small muted">
-          Sold and received amounts come from event history, which this RPC could not serve: {describeError(history.error)}
-        </p>
+      {history.error != null &&
+        (info.indexed ? (
+          <p className="small muted">
+            Sold and received amounts come from the Selio indexer, which could not be read: {describeError(history.error)}
+          </p>
+        ) : (
+          <p className="small muted">
+            Sold and received amounts come from event history, which this RPC could not serve: {describeError(history.error)}
+          </p>
+        ))}
+      {info.indexed && indexer === null && (
+        <p className="small muted">Sold and received amounts come from the Selio indexer, which this build does not point to.</p>
       )}
       {sales.data === undefined && sales.error == null && <p className="muted loading">Reading your auctions…</p>}
       {empty && <p className="muted">No sales yet. Your auctions and sell-now fills show up here.</p>}
@@ -210,6 +231,12 @@ export function YourSales({ selio, meta }: { selio: SelioClient; meta: MarketMet
             </tbody>
           </table>
         </div>
+      )}
+      {info.indexed && (index.state === "lagging" || index.state === "syncing") && index.status && (
+        <p className="small muted">
+          Sold and received amounts are indexed to block {index.status.progressBlock.toLocaleString("en-US")}; newer fills appear
+          shortly.
+        </p>
       )}
       <p className="small muted">Unsold receipts come back to you at once, with no waiting period; what already sold stays sold.</p>
       <TxStatus state={runner.state} />

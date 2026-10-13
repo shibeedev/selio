@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type Route = "overview" | "sell" | "buy" | "earn" | "frozen" | "developers";
+export type Route = "overview" | "sell" | "buy" | "earn" | "frozen" | "history" | "developers";
 
 /** Hash path of every route. A new page adds its route here and its component in App.tsx. */
 export const ROUTE_PATHS: Record<Route, string> = {
@@ -9,6 +9,7 @@ export const ROUTE_PATHS: Record<Route, string> = {
   buy: "/buy",
   earn: "/earn",
   frozen: "/frozen-collateral",
+  history: "/history",
   developers: "/developers",
 };
 

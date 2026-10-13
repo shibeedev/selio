@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { isAddressEqual, type Address } from "viem";
-import type { BidView, SelioClient } from "@selio/sdk";
+import type { BidView, IndexerClient, SelioClient } from "@selio/sdk";
 import { AmountField } from "../../components/AmountField";
 import { DemoFunds } from "../../components/DemoFunds";
 import { Notice } from "../../components/ui";
@@ -9,13 +9,14 @@ import { describeError } from "../../lib/errors";
 import { bpsToPercentInput, formatBps, formatToken, parseAmountInput, parsePercentToBps } from "../../lib/format";
 import { loadBidOrigins } from "../../lib/history";
 import { useAsync } from "../../lib/hooks";
+import { HISTORY_POLL_MS, indexerBidOrigins, useIndexer } from "../../lib/indexer";
 import { receiptNoun, type MarketMeta } from "../../lib/market";
 import { useNetwork } from "../../lib/network-context";
 import { approvalStep, useTxRunner, type TxStep } from "../../lib/tx";
 import { useWallet } from "../../lib/wallet-context";
 
 export function LimitBidsSection({ selio, meta, bids }: { selio: SelioClient; meta: MarketMeta; bids?: BidView[] }) {
-  const { refreshKey } = useNetwork();
+  const { info, refreshKey } = useNetwork();
   const wallet = useWallet();
   const address = wallet.address;
   const runner = useTxRunner();
@@ -40,10 +41,20 @@ export function LimitBidsSection({ selio, meta, bids }: { selio: SelioClient; me
     enabled: !!address && !!payToken,
     reloadKey: refreshKey,
   });
-  const origins = useAsync(() => loadBidOrigins(selio, address as Address), [selio, address], {
-    enabled: !!address,
-    reloadKey: refreshKey,
-  });
+  // Each bid's whole size: from the event index on an indexed network (exact after resizes), else from the logs.
+  const indexer = useIndexer();
+  const origins = useAsync(
+    () =>
+      info.indexed
+        ? indexerBidOrigins(indexer as IndexerClient, selio.market, address as Address)
+        : loadBidOrigins(selio, address as Address),
+    [selio, address, indexer],
+    {
+      enabled: !!address && (!info.indexed || indexer !== null),
+      pollMs: info.indexed ? HISTORY_POLL_MS : undefined,
+      reloadKey: refreshKey,
+    },
+  );
 
   const short = escrow.data !== undefined && balance.data !== undefined && escrow.data > balance.data;
   const busy = runner.state.busy !== null;

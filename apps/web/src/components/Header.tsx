@@ -12,6 +12,7 @@ export const NAV_ITEMS: { route: Route; label: string; testid: string }[] = [
   { route: "buy", label: "Buy & repay", testid: "nav-buy" },
   { route: "earn", label: "Earn", testid: "nav-earn" },
   { route: "frozen", label: "Frozen collateral", testid: "nav-frozen" },
+  { route: "history", label: "History", testid: "nav-history" },
 ];
 
 export function Header({ route }: { route: Route }) {
