@@ -17,17 +17,27 @@
   --glass: rgba(255, 255, 255, 0.045);
   --glass-2: rgba(255, 255, 255, 0.075);
   --glass-3: rgba(255, 255, 255, 0.11);
-  --glass-card: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.028) 100%);
+  /* Frosted dark glass: a white sheen that fades down over a dark violet tint, so the glows behind show through
+     dimmed and text keeps its contrast. */
+  --glass-card:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.026) 38%, rgba(255, 255, 255, 0.014) 100%),
+    rgba(12, 8, 26, 0.4);
+  --glass-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.016) 55%), rgba(8, 5, 18, 0.24);
+  --glass-tile: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(8, 5, 18, 0.3);
   --glass-menu: rgba(17, 12, 30, 0.88);
-  --glass-header: rgba(9, 6, 17, 0.66);
+  --glass-header: rgba(9, 6, 17, 0.62);
   --glass-field: rgba(4, 2, 10, 0.55);
-  --border: rgba(255, 255, 255, 0.1);
-  --border-2: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.11);
+  --border-2: rgba(255, 255, 255, 0.075);
+  --border-top: rgba(255, 255, 255, 0.2);
   --border-strong: rgba(255, 255, 255, 0.2);
   --line: rgba(255, 255, 255, 0.065);
-  --sheen: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --blur: saturate(160%) blur(22px);
-  --shadow: 0 28px 60px -34px rgba(0, 0, 0, 0.95);
+  --sheen: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --sheen-soft: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --inner-glow: inset 0 22px 48px -32px rgba(185, 155, 255, 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.012);
+  --inner-glow-soft: inset 0 16px 36px -28px rgba(185, 155, 255, 0.16);
+  --blur: saturate(170%) blur(24px);
+  --shadow: 0 28px 64px -34px rgba(0, 0, 0, 0.95);
   --menu-shadow: 0 32px 80px -24px rgba(0, 0, 0, 0.9);
 
   --purple-100: #e9e0ff;
@@ -85,17 +95,68 @@ body {
   background: var(--bg);
 }
 
-/* The glows sit behind every panel, so the frosted glass has something to blur. */
+/* The body's own stacking context puts the glow and grain layers above its black background and below the page. */
+body {
+  isolation: isolate;
+}
+
+/*
+  Purple and violet glows drift slowly behind every panel, so the frosted glass has light to blur. Two fixed layers
+  move in opposite directions; only their transform animates, so the browser composites them without repainting.
+  The layers overhang the viewport so their edges never show while they drift.
+*/
+body::before,
+.app::before {
+  content: "";
+  position: fixed;
+  inset: -18vmax;
+  z-index: -1;
+  pointer-events: none;
+}
+
 body::before {
+  background:
+    radial-gradient(34vmax 25vmax at 24% 22%, rgba(124, 77, 255, 0.3), transparent 70%),
+    radial-gradient(30vmax 22vmax at 80% 30%, rgba(84, 37, 207, 0.27), transparent 70%),
+    radial-gradient(40vmax 26vmax at 52% 94%, rgba(160, 124, 255, 0.15), transparent 72%);
+  animation: glow-drift-a 46s ease-in-out infinite alternate;
+}
+
+.app::before {
+  background:
+    radial-gradient(26vmax 20vmax at 68% 64%, rgba(139, 92, 246, 0.2), transparent 70%),
+    radial-gradient(22vmax 17vmax at 14% 76%, rgba(112, 64, 226, 0.18), transparent 70%);
+  animation: glow-drift-b 61s ease-in-out infinite alternate;
+}
+
+/* A faint, static grain over the glows keeps the dark glass from looking like flat colour. */
+body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(46rem 30rem at 10% -8%, rgba(124, 77, 255, 0.3), transparent 70%),
-    radial-gradient(38rem 28rem at 95% 14%, rgba(84, 37, 207, 0.24), transparent 70%),
-    radial-gradient(52rem 34rem at 45% 112%, rgba(160, 124, 255, 0.13), transparent 70%);
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 180px 180px;
+}
+
+@keyframes glow-drift-a {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.06);
+  }
+}
+
+@keyframes glow-drift-b {
+  from {
+    transform: translate3d(3%, 2%, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(-4%, -3%, 0) scale(1);
+  }
 }
 
 a {
@@ -399,7 +460,9 @@ p {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading::after {
+  .loading::after,
+  body::before,
+  .app::before {
     animation: none;
   }
 
@@ -771,10 +834,11 @@ p {
 .card {
   background: var(--glass-card);
   border: 1px solid var(--border);
+  border-top-color: var(--border-top);
   border-radius: var(--radius);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--sheen), var(--shadow);
+  box-shadow: var(--sheen), var(--inner-glow), var(--shadow);
 }
 
 .card--pad {
@@ -789,7 +853,8 @@ p {
 /* The card that holds the page's main action. */
 .card--feature {
   border-color: var(--accent-border);
-  box-shadow: var(--sheen), var(--accent-glow);
+  border-top-color: rgba(205, 185, 255, 0.55);
+  box-shadow: var(--sheen), var(--inner-glow), var(--accent-glow);
 }
 
 .card--dark {
@@ -804,8 +869,10 @@ p {
   gap: 10px;
   padding: 18px 20px;
   border: 1px solid var(--border-2);
+  border-top-color: var(--border);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--glass-panel);
+  box-shadow: var(--sheen-soft), var(--inner-glow-soft);
 }
 
 /* notices */
@@ -930,8 +997,9 @@ p {
   white-space: nowrap;
 }
 
+/* Darker than the button fill: white 12.5 px text needs 4.5:1. */
 .who--vault {
-  background: var(--accent-fill);
+  background: linear-gradient(180deg, var(--purple-600) 0%, var(--purple-700) 100%);
   color: #ffffff;
   box-shadow: 0 0 14px rgba(124, 77, 255, 0.45);
 }
@@ -959,7 +1027,9 @@ p {
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--border-2);
-  background: rgba(255, 255, 255, 0.035);
+  border-top-color: var(--border);
+  background: var(--glass-tile);
+  box-shadow: var(--sheen-soft);
 }
 
 .yield-block {
@@ -997,7 +1067,9 @@ p {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border-2);
-  background: rgba(255, 255, 255, 0.03);
+  border-top-color: var(--border);
+  background: var(--glass-tile);
+  box-shadow: var(--sheen-soft);
   font-size: 14.5px;
 }
 
@@ -1647,10 +1719,11 @@ p {
   padding: 16px 18px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  border-top-color: var(--border-top);
   background: var(--glass-card);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--sheen), var(--shadow);
+  box-shadow: var(--sheen), var(--inner-glow), var(--shadow);
 }
 
 .hero-stat-value {
