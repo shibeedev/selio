@@ -11,17 +11,32 @@ export interface DynamicUser {
 
 export type TokenVerifier = (token: string) => Promise<DynamicUser>;
 
+/** The verified credentials of a user, read from Dynamic's admin API by the token's subject. */
+export type CredentialLookup = (userId: string) => Promise<unknown>;
+
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 export function dynamicJwks(environmentId: string): JWTVerifyGetKey {
   return createRemoteJWKSet(new URL(`https://app.dynamicauth.com/api/v0/sdk/${environmentId}/.well-known/jwks`));
 }
 
+/** `GET /environments/{id}/users/{userId}` with the environment API token; resolves to the user's verified credentials. */
+export function dynamicCredentialLookup(environmentId: string, apiToken: string, fetchImpl: typeof fetch = fetch): CredentialLookup {
+  return async (userId) => {
+    const url = `https://app.dynamic.xyz/api/v0/environments/${encodeURIComponent(environmentId)}/users/${encodeURIComponent(userId)}`;
+    const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${apiToken}` }, signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) throw new Error(`Dynamic user lookup answered ${res.status}`);
+    const body = (await res.json()) as { user?: { verifiedCredentials?: unknown } };
+    return body.user?.verifiedCredentials;
+  };
+}
+
 /**
  * RS256 against the environment's JWKS and issuer; then the token must carry the scope
  * `user:basic` (a token without it has not finished authentication), the environment id and a subject.
+ * Dynamic's minified token carries no `verified_credentials`; the wallets then come from `lookup` by the verified subject.
  */
-export function createTokenVerifier(environmentId: string, keys: JWTVerifyGetKey): TokenVerifier {
+export function createTokenVerifier(environmentId: string, keys: JWTVerifyGetKey, lookup?: CredentialLookup): TokenVerifier {
   const issuer = `app.dynamicauth.com/${environmentId}`;
   return async (token) => {
     const { payload } = await jwtVerify(token, keys, { algorithms: ["RS256"], issuer });
@@ -29,7 +44,9 @@ export function createTokenVerifier(environmentId: string, keys: JWTVerifyGetKey
     if (!scopes.includes("user:basic")) throw new Error("token lacks the user:basic scope");
     if (payload.environment_id !== environmentId) throw new Error("token is for another environment");
     if (typeof payload.sub !== "string" || payload.sub === "") throw new Error("token has no subject");
-    return { userId: payload.sub, addresses: evmAddresses(payload.verified_credentials) };
+    const credentials =
+      Array.isArray(payload.verified_credentials) || !lookup ? payload.verified_credentials : await lookup(payload.sub);
+    return { userId: payload.sub, addresses: evmAddresses(credentials) };
   };
 }
 

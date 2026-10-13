@@ -8,7 +8,7 @@ import { ChainGateway } from "./shared/integrations/chain/chain.gateway.js";
 import { createDynamicGateway, type DynamicPort } from "./shared/integrations/dynamic/dynamic.gateway.js";
 import { McpClient } from "./shared/integrations/mcp/mcp.client.js";
 import { createLogger, errorFields } from "./shared/middlewares/logger.js";
-import { createTokenVerifier, dynamicJwks } from "./shared/middlewares/requireDynamicUser.js";
+import { createTokenVerifier, dynamicCredentialLookup, dynamicJwks } from "./shared/middlewares/requireDynamicUser.js";
 
 const HOST = "127.0.0.1";
 
@@ -62,7 +62,12 @@ async function main(): Promise<void> {
         `Dynamic's server SDK could not be loaded (${err instanceof Error ? err.message : String(err)}); it runs on Linux and macOS only`,
       );
     }
-    dynamic = { environmentId, webhookSecret, gateway, verifyToken: createTokenVerifier(environmentId, dynamicJwks(environmentId)) };
+    dynamic = {
+      environmentId,
+      webhookSecret,
+      gateway,
+      verifyToken: createTokenVerifier(environmentId, dynamicJwks(environmentId), dynamicCredentialLookup(environmentId, apiToken)),
+    };
   } else {
     log.warn({ missing: DYNAMIC_KEYS }, "dynamic not configured: grants, delegations and signing are off until it is");
   }
