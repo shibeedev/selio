@@ -31,6 +31,14 @@ export function DevelopersPage() {
     "bidCapacityAt(uint16 discountBps) → uint256  // escrowed bids only",
     "activeBidIdsPage(offset, limit) → uint256[]   bids(id) → (bidder, minDiscountBps, …)",
     "nextSessionId()   sessions(id)   discountOf(id)   remainingAssets(id)",
+    ...(deployment.status === "ready" && deployment.deployment.kuruSellRouter
+      ? [
+          "",
+          `// Kuru market ${deployment.deployment.kuruMarket}, through KuruSellRouter ${deployment.deployment.kuruSellRouter}`,
+          "exitCapacity() → the pool's capacity: the risk data behind every receipt on Kuru",
+          "facePerBase() → underlying per whole base unit, to read Kuru prices as discounts",
+        ]
+      : []),
   ].join("\n");
 
   const sdk = [

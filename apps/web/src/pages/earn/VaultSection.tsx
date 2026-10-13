@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { isAddressEqual, zeroAddress } from "viem";
-import { aaveExitMarketAbi, type BidView, type SelioClient } from "@selio/sdk";
+import { encodeFunctionData, isAddressEqual, zeroAddress } from "viem";
+import { aaveExitMarketAbi, selioVaultAbi, type BidView, type SelioClient } from "@selio/sdk";
 import { AmountField } from "../../components/AmountField";
 import { DemoFunds } from "../../components/DemoFunds";
 import { Chip, Notice, Stat, SummaryRow, ToggleGroup } from "../../components/ui";
@@ -9,6 +9,7 @@ import { baseYieldRows, baseYieldRule, sourceInKindText, sourceState, yieldSourc
 import { describeError } from "../../lib/errors";
 import { formatAmount, formatBps, formatShare, formatToken, parseAmountInput, toInputString } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
+import { hasKuru, kuruPriceText } from "../../lib/kuru";
 import { receiptNoun, type MarketMeta } from "../../lib/market";
 import { useNetwork } from "../../lib/network-context";
 import { approvalStep, useTxRunner, type TxStep } from "../../lib/tx";
@@ -42,7 +43,7 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
         selio.capacity(),
         address ? selio.balanceOf(asset.address, address) : Promise.resolve(null),
       ]);
-      const [inKindValue, sourceToken] = await Promise.all([
+      const [inKindValue, sourceToken, kuruMarket] = await Promise.all([
         state.redeemInKind === 0n
           ? Promise.resolve(0n)
           : selio.client.readContract({
@@ -52,8 +53,9 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
               args: [state.redeemInKind],
             }),
         isAddressEqual(state.yieldSource, zeroAddress) ? Promise.resolve(null) : selio.token(state.yieldSource),
+        state.kuru ? selio.kuruMarket() : Promise.resolve(null),
       ]);
-      return { state, cap, balance, inKindValue, sourceToken };
+      return { state, cap, balance, inKindValue, sourceToken, kuruMarket };
     },
     [selio, meta, address],
     { pollMs: 20_000, reloadKey: refreshKey },
@@ -131,6 +133,33 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
     ];
   };
 
+  // The vault's Kuru bid has a fixed price: if the receipt loses value it sits above the minimum discount until a refresh.
+  const kuru = state?.kuru;
+  const kuruBidText =
+    !kuru || !data?.kuruMarket
+      ? "…"
+      : kuru.orderId > 0n && kuru.faceAssets > 0n
+        ? `${formatToken(kuru.faceAssets, U)} at ${formatBps(kuru.discountBps)} · ${kuruPriceText(kuru.price, data.kuruMarket)}`
+        : "None";
+  const kuruStale = !!kuru && kuru.orderId > 0n && kuru.faceAssets > 0n && kuru.discountBps < vaultMeta.minDiscountBps;
+  const refresh = () =>
+    upkeep.send(async () => [
+      {
+        label: "Re-price the Selio Vault's bids at its minimum discount",
+        tx: {
+          to: vaultMeta.address,
+          data: encodeFunctionData({ abi: selioVaultAbi, functionName: "refreshBids" }),
+          value: 0n,
+          description: "Refresh the Selio Vault's bids",
+        },
+      },
+    ]);
+  const claimKuru = () =>
+    upkeep.send(async () => {
+      if (!address) throw new Error("Connect a wallet first.");
+      return [{ label: "Claim your share of the vault's Kuru position", tx: selio.vaultClaimKuru(address) }];
+    });
+
   const recover = () =>
     upkeep.send(async () => [
       {
@@ -168,8 +197,52 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
           <Stat label="Waiting capital" testid="vault-idle" value={state ? formatToken(state.idleAssets, asset) : "…"} />
           <Stat label="Held in stuck receipts" testid="vault-held" value={state ? formatToken(state.heldAssets, asset) : "…"} />
           <Stat label="Standing bid now" testid="vault-bid" value={!state ? "…" : bid ? formatToken(bid.capacityAssets, U) : "None"} />
+          {hasKuru(selio) && <Stat label="Standing bid on Kuru" testid="vault-kuru-bid" value={state ? kuruBidText : "…"} />}
           <Stat label="Total" testid="vault-total" value={state ? formatToken(state.totalAssets, asset) : "…"} />
         </div>
+        {kuruStale && kuru && (
+          <div className="stack-sm">
+            <p className="small text-warn">
+              Kuru bid priced at {formatBps(kuru.discountBps)} below current face, under the vault's{" "}
+              {formatBps(vaultMeta.minDiscountBps)} minimum; refresh it.
+            </p>
+            <button
+              type="button"
+              className="btn btn--secondary btn--small self-start"
+              disabled={upkeep.state.busy !== null || blocked}
+              onClick={() => void refresh()}
+              data-testid="vault-kuru-refresh"
+            >
+              Refresh the vault's bids
+            </button>
+          </div>
+        )}
+        {kuru?.claimable && (
+          <div className="stack-sm" data-testid="vault-kuru-claim">
+            {kuru.claimable.resolved ? (
+              <>
+                <p className="small">
+                  Your share of the vault's Kuru position: claimable, {formatToken(kuru.claimable.cash, asset)} and{" "}
+                  {formatToken(kuru.claimable.receipts, R)}.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--small self-start"
+                  disabled={upkeep.state.busy !== null || blocked}
+                  onClick={() => void claimKuru()}
+                  data-testid="vault-kuru-claim-submit"
+                >
+                  Claim it
+                </button>
+              </>
+            ) : (
+              <p className="small muted">
+                Your share of the vault's Kuru position was set aside while Kuru could not be reached; you can claim it once Kuru
+                is back.
+              </p>
+            )}
+          </div>
+        )}
         {source && (
           <div className="yield-block stack-sm">
             <div className="panel-head">
@@ -196,6 +269,7 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
             interest the receipts earn meanwhile.
           </li>
         </ul>
+        {(kuruStale || kuru?.claimable) && !(recoverable > 0n) && <TxStatus state={upkeep.state} />}
         {recoverable > 0n && (
           <div className="stack-sm">
             <button
@@ -309,6 +383,7 @@ export function VaultSection({ selio, meta, bids }: { selio: SelioClient; meta: 
         <p className="small muted">
           Risks: capital can sit in stuck receipts until the pool refills, and receipts lose value if the pool takes bad debt. The
           per-receipt cap limits both.
+          {hasKuru(selio) && " Part of the vault's bid sits on Kuru's order book, which Kuru can pause or upgrade."}
         </p>
       </section>
     </>

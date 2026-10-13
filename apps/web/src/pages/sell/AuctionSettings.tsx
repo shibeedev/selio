@@ -60,7 +60,7 @@ const FIELDS: { field: keyof Omit<AuctionInputs, "payIdx">; id: string; label: s
 
 const when = (seconds: number) => (seconds === 0 ? "at once" : `after ${formatDuration(seconds)}`);
 
-function pathSentence(p: SessionParams, bids: readonly BidView[], meta: MarketMeta): string {
+function pathSentence(p: SessionParams, bids: readonly BidView[], meta: MarketMeta, kuruBestBps: number | null): string {
   const curve = { startBps: p.startBps, stepBps: p.stepBps, stepInterval: p.stepInterval, capBps: p.capBps };
   const toCap = secondsToReach(curve, p.capBps);
   const parts = [
@@ -71,6 +71,8 @@ function pathSentence(p: SessionParams, bids: readonly BidView[], meta: MarketMe
   const best = bids.find((b) => b.capacityAssets > 0n);
   const toBest = best ? secondsToReach(curve, best.minDiscountBps) : null;
   if (best && toBest !== null) parts.push(`Reaches the best limit bid (${formatBps(best.minDiscountBps)}) ${when(toBest)}.`);
+  // An auction cannot sell into Kuru; the seller can compare with Kuru's best bid before opening one.
+  if (kuruBestBps !== null) parts.push(`Kuru best bid now: ${formatBps(kuruBestBps)}.`);
   const vaultMin = formatBps(meta.vault.minDiscountBps);
   const toVault = secondsToReach(curve, meta.vault.minDiscountBps);
   parts.push(
@@ -86,6 +88,7 @@ export function AuctionSettings({
   meta,
   assets,
   bids,
+  kuruBestBps = null,
   inputs,
   onChange,
 }: {
@@ -93,6 +96,8 @@ export function AuctionSettings({
   meta: MarketMeta;
   assets: bigint | null;
   bids: BidView[];
+  /** Discount of the Kuru book's best bid, on a Kuru network. */
+  kuruBestBps?: number | null;
   inputs: AuctionInputs;
   onChange: (inputs: AuctionInputs) => void;
 }) {
@@ -171,7 +176,7 @@ export function AuctionSettings({
         </div>
       </fieldset>
       <p className={error ? "small text-bad" : "small muted"} data-testid="auction-path">
-        {error ?? (params ? pathSentence(params, bids, meta) : "")}
+        {error ?? (params ? pathSentence(params, bids, meta, kuruBestBps) : "")}
       </p>
       {quotes.error ? (
         <Notice tone="danger">Can't price the auction: {describeError(quotes.error)}</Notice>

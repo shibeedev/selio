@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { SelioClient, SellPlan } from "@selio/sdk";
+import type { Address } from "viem";
+import type { SelioClient } from "@selio/sdk";
 import { AmountField } from "../../components/AmountField";
 import { DemoFunds } from "../../components/DemoFunds";
 import { Notice } from "../../components/ui";
@@ -7,6 +8,7 @@ import { TxStatus } from "../../components/TxStatus";
 import { describeError } from "../../lib/errors";
 import { formatAmount, formatBps, formatToken, parseAmountInput, toInputString } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
+import { hasKuru } from "../../lib/kuru";
 import { poolTitle, receiptNoun, type MarketMeta } from "../../lib/market";
 import { useNetwork } from "../../lib/network-context";
 import { venueLabel } from "../../lib/networks";
@@ -14,7 +16,7 @@ import { allPayMask } from "../../lib/paymask";
 import { approvalStep, useTxRunner, withATokenMargin, type TxStep } from "../../lib/tx";
 import { useWallet } from "../../lib/wallet-context";
 import { AuctionSettings, defaultAuctionInputs, deriveSessionParams, type AuctionInputs } from "./AuctionSettings";
-import { SellNowPreview } from "./SellNowPreview";
+import { KuruRiskPanel, SellNowPreview, type PreviewPlan } from "./SellNowPreview";
 
 type Mode = "now" | "auction";
 
@@ -29,7 +31,11 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
   const [amount, setAmount] = useState("");
   const [usingMax, setUsingMax] = useState(false);
   const [auction, setAuction] = useState<AuctionInputs>(() => defaultAuctionInputs(meta));
-  const [plan, setPlan] = useState<SellPlan | null>(null);
+  const [preview, setPreview] = useState<PreviewPlan | null>(null);
+  // On a Kuru network sell now also routes through the Kuru book, unless the seller falls back to Selio only.
+  const kuruNetwork = hasKuru(selio);
+  const [selioOnly, setSelioOnly] = useState(false);
+  const useKuru = kuruNetwork && !selioOnly;
 
   const position = useAsync(
     async () => {
@@ -47,6 +53,14 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
     [selio],
     { pollMs: 15_000, reloadKey: refreshKey },
   );
+  const kuru = useAsync(
+    async () => {
+      const [m, face, book] = await Promise.all([selio.kuruMarket(), selio.kuruFacePerBase(), selio.kuruBook()]);
+      return { m, face, best: book[0] };
+    },
+    [selio],
+    { enabled: kuruNetwork, pollMs: 15_000, reloadKey: refreshKey },
+  );
 
   const balance = position.data?.value;
   const parsed = parseAmountInput(amount, U.decimals);
@@ -60,7 +74,34 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
   const util = market.data?.cap.utilizationBps;
   const busy = runner.state.busy !== null;
 
+  const routedSteps = async (account: Address): Promise<TxStep[]> => {
+    const routed = preview?.routed;
+    if (!routed?.kuru) throw new Error("No bid can fill this sale right now.");
+    const router = selio.deployment.kuruSellRouter as Address;
+    // The Selio leg keeps the rule of a plain sell-now: capped at the worst previewed discount.
+    const worst = routed.selio.fills.reduce((m, f) => Math.max(m, f.discountBps), 0);
+    const approval = await approvalStep(
+      selio,
+      R,
+      account,
+      router,
+      await selio.routedSellApproval(routed),
+      "so the router can sell them for you on Selio and Kuru",
+    );
+    const n = routed.selio.fills.length;
+    const main: TxStep = {
+      label:
+        n > 0
+          ? `Sell ${formatToken(routed.filledAssets, U)} into ${n} bid${n > 1 ? "s" : ""} and the Kuru order book`
+          : `Sell ${formatToken(routed.filledAssets, U)} on the Kuru order book`,
+      tx: selio.routedSell({ ...routed, maxDiscountBps: worst }, account),
+    };
+    return approval ? [approval, main] : [main];
+  };
+
   const sellNowSteps = async (): Promise<TxStep[]> => {
+    if (address && preview?.routed?.kuru) return routedSteps(address);
+    const plan = preview?.selio;
     if (!address || !plan || plan.filledAssets === 0n) throw new Error("No bid can fill this sale right now.");
     const worst = plan.fills.reduce((m, f) => Math.max(m, f.discountBps), 0);
     // aTokens and vault shares both round up per fill, so the allowance carries a margin per fill.
@@ -91,11 +132,14 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
     return approval ? [approval, main] : [main];
   };
 
+  const previewFilled = preview ? (preview.routed ? preview.routed.filledAssets : preview.selio.filledAssets) : 0n;
   const canSubmit =
     !!address &&
     !wallet.writeBlockedReason &&
     !busy &&
-    (mode === "now" ? !!(plan && plan.filledAssets > 0n && validAssets) : !!(validAssets && params));
+    (mode === "now" ? !!(preview && previewFilled > 0n && validAssets) : !!(validAssets && params));
+  // A failed routed sale (Kuru paused, paying less than planned) can still go to Selio's bids alone.
+  const offerSelioOnly = useKuru && mode === "now" && runner.state.outcome === "failed" && !!preview?.routed?.kuru;
 
   const chooseMode = (next: Mode) => {
     setMode(next);
@@ -156,8 +200,20 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
           >
             <span className="choice-title">Sell now</span>
             <span className="choice-desc">
-              Fill against limit bids and the Selio Vault, best price first.{" "}
+              {useKuru
+                ? "Fill against Selio's limit bids, the Selio Vault and the Kuru order book, best price per unit. "
+                : "Fill against limit bids and the Selio Vault, best price first. "}
               {bestBid ? `Best bid: ${formatBps(bestBid.minDiscountBps)} discount.` : "No bids right now."}
+              {useKuru && " "}
+              {useKuru && (
+                <span data-testid="sell-kuru-best">
+                  {kuru.data
+                    ? kuru.data.best
+                      ? `Kuru best bid: ${formatBps(kuru.data.best.discountBps)} discount, ${formatToken(kuru.data.best.faceAssets, U)}`
+                      : "Kuru best bid: none yet"
+                    : "Kuru best bid: …"}
+                </span>
+              )}
             </span>
           </button>
           <button
@@ -197,13 +253,21 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
           error={amount ? amountError : null}
         />
         {mode === "now" ? (
-          <SellNowPreview selio={selio} meta={meta} assets={validAssets} bids={market.data?.bids} onPlan={setPlan} />
+          <SellNowPreview
+            selio={selio}
+            meta={meta}
+            assets={validAssets}
+            bids={market.data?.bids}
+            useKuru={useKuru}
+            onPlan={setPreview}
+          />
         ) : (
           <AuctionSettings
             selio={selio}
             meta={meta}
             assets={validAssets}
             bids={market.data?.bids ?? []}
+            kuruBestBps={kuru.data?.best?.discountBps ?? null}
             inputs={auction}
             onChange={(next) => {
               setAuction(next);
@@ -222,6 +286,23 @@ export function SellForm({ selio, meta }: { selio: SelioClient; meta: MarketMeta
           {busy ? "Working…" : mode === "now" ? "Sell now" : "Open auction"}
         </button>
         <TxStatus state={runner.state} />
+        {offerSelioOnly && (
+          <button
+            type="button"
+            className="btn btn--secondary self-start"
+            onClick={() => {
+              setSelioOnly(true);
+              runner.reset();
+            }}
+            data-testid="sell-selio-only"
+          >
+            Sell on Selio only
+          </button>
+        )}
+        {kuruNetwork && kuru.data && (
+          <KuruRiskPanel meta={meta} market={kuru.data.m} face={kuru.data.face} best={kuru.data.best} cap={market.data?.cap} />
+        )}
+        {kuru.error != null && <p className="small muted">The Kuru market could not be read: {describeError(kuru.error)}</p>}
       </section>
     </div>
   );

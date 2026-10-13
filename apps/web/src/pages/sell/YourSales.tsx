@@ -5,7 +5,7 @@ import { TxStatus } from "../../components/TxStatus";
 import { describeError } from "../../lib/errors";
 import { formatFillAmounts } from "../../lib/fees";
 import { formatBps, formatToken } from "../../lib/format";
-import { loadSellerHistory, summarizeFills, type FillSummary, type SellerFill } from "../../lib/history";
+import { loadSellerHistory, sellNowRows, summarizeFills, type FillSummary } from "../../lib/history";
 import { useAsync } from "../../lib/hooks";
 import { HISTORY_POLL_MS, indexerSellerHistory, useIndexer, useIndexerStatus } from "../../lib/indexer";
 import { receiptNoun, type MarketMeta } from "../../lib/market";
@@ -83,15 +83,9 @@ export function YourSales({ selio, meta }: { selio: SelioClient; meta: MarketMet
   const busy = runner.state.busy !== null;
   const blocked = !!wallet.writeBlockedReason;
   const fills = history.data?.fills ?? [];
-  const sellNowGroups = new Map<string, SellerFill[]>();
-  fills
-    .filter((f) => f.sessionId === 0n)
-    .forEach((f, n) => {
-      const key = f.txHash ?? `fill-${n}`;
-      sellNowGroups.set(key, [...(sellNowGroups.get(key) ?? []), f]);
-    });
+  const sellNow = sellNowRows(fills);
   const mine = sales.data?.mine ?? [];
-  const empty = sales.data !== undefined && mine.length === 0 && sellNowGroups.size === 0;
+  const empty = sales.data !== undefined && mine.length === 0 && sellNow.length === 0;
 
   const withdraw = (s: SessionView) =>
     runner.send(async () => [
@@ -206,13 +200,13 @@ export function YourSales({ selio, meta }: { selio: SelioClient; meta: MarketMet
                   </tr>
                 );
               })}
-              {[...sellNowGroups].map(([key, group]) => {
-                const summary = summarizeFills(group);
+              {sellNow.map((row) => {
+                const summary = summarizeFills(row.fills);
                 return (
-                  <tr key={key} data-testid="sellnow-row">
+                  <tr key={row.key} data-testid="sellnow-row">
                     <td>
                       <div className="cell-title">{receiptNoun(meta)}</div>
-                      <div className="cell-sub">Sold now to bids</div>
+                      <div className="cell-sub">{row.label}</div>
                     </td>
                     <td className="mono">{formatToken(summary.assets, U)}</td>
                     <td className="mono">{summary.avgDiscountBps === null ? "—" : formatBps(summary.avgDiscountBps)}</td>

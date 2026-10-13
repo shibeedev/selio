@@ -3,17 +3,21 @@ import { isAddressEqual, type Address } from "viem";
 import type { BidView, IndexerClient, SelioClient } from "@selio/sdk";
 import { AmountField } from "../../components/AmountField";
 import { DemoFunds } from "../../components/DemoFunds";
-import { Notice } from "../../components/ui";
+import { Notice, ToggleGroup } from "../../components/ui";
 import { TxStatus } from "../../components/TxStatus";
 import { describeError } from "../../lib/errors";
 import { bpsToPercentInput, formatBps, formatToken, parseAmountInput, parsePercentToBps } from "../../lib/format";
 import { loadBidOrigins } from "../../lib/history";
 import { useAsync } from "../../lib/hooks";
 import { HISTORY_POLL_MS, indexerBidOrigins, useIndexer } from "../../lib/indexer";
+import { hasKuru } from "../../lib/kuru";
 import { receiptNoun, type MarketMeta } from "../../lib/market";
 import { useNetwork } from "../../lib/network-context";
 import { approvalStep, useTxRunner, type TxStep } from "../../lib/tx";
 import { useWallet } from "../../lib/wallet-context";
+import { KuruBidForm } from "./KuruBidForm";
+
+type Venue = "selio" | "kuru";
 
 export function LimitBidsSection({ selio, meta, bids }: { selio: SelioClient; meta: MarketMeta; bids?: BidView[] }) {
   const { info, refreshKey } = useNetwork();
@@ -25,6 +29,7 @@ export function LimitBidsSection({ selio, meta, bids }: { selio: SelioClient; me
   const [size, setSize] = useState("");
   const [discount, setDiscount] = useState(bpsToPercentInput(200));
   const [payIdx, setPayIdx] = useState(0);
+  const [venue, setVenue] = useState<Venue>("selio");
   const payToken = meta.payTokens[payIdx];
 
   const parsedSize = parseAmountInput(size, U.decimals);
@@ -97,99 +102,117 @@ export function LimitBidsSection({ selio, meta, bids }: { selio: SelioClient; me
 
   return (
     <>
-      <section className="card card--pad card--feature stack" aria-labelledby="h-place">
-        <h2 id="h-place" className="h2-sm">
-          Place a limit bid
-        </h2>
-        <p className="text-2">
-          Buy stuck receipts at the discount you choose, then redeem them at full value when the pool refills. The bid sits in the
-          same public book the Selio Vault uses.
-        </p>
+      {hasKuru(selio) && (
         <fieldset className="fieldset">
-          <legend className="label">Receipt to buy</legend>
-          <div className="toggle-group">
-            <button type="button" className="toggle toggle--pill" aria-pressed="true">
-              {receiptNoun(meta)}
-            </button>
-          </div>
-        </fieldset>
-        <div className="field-row">
-          <AmountField
-            id="ord-size"
-            testid="bid-amount"
-            label={`Buy up to (${U.symbol} face value)`}
-            value={size}
-            onChange={(v) => {
-              setSize(v);
-              runner.reset();
-            }}
-            error={size ? parsedSize.error : null}
+          <legend className="label">Where to bid</legend>
+          <ToggleGroup<Venue>
+            label="Where to bid"
+            value={venue}
+            onChange={setVenue}
+            options={[
+              { value: "selio", label: "Selio (escrowed in Selio's market)", testid: "bid-venue-selio" },
+              { value: "kuru", label: "Kuru order book", testid: "bid-venue-kuru" },
+            ]}
           />
-          <div className="field">
-            <label className="label" htmlFor="ord-disc">
-              Only at a discount of at least (%)
-            </label>
-            <input
-              id="ord-disc"
-              className="input input--mono"
-              inputMode="decimal"
-              value={discount}
-              onChange={(e) => {
-                setDiscount(e.target.value);
+        </fieldset>
+      )}
+      {venue === "kuru" ? (
+        <KuruBidForm selio={selio} meta={meta} />
+      ) : (
+        <section className="card card--pad card--feature stack" aria-labelledby="h-place">
+          <h2 id="h-place" className="h2-sm">
+            Place a limit bid
+          </h2>
+          <p className="text-2">
+            Buy stuck receipts at the discount you choose, then redeem them at full value when the pool refills. The bid sits in the
+            same public book the Selio Vault uses.
+          </p>
+          <fieldset className="fieldset">
+            <legend className="label">Receipt to buy</legend>
+            <div className="toggle-group">
+              <button type="button" className="toggle toggle--pill" aria-pressed="true">
+                {receiptNoun(meta)}
+              </button>
+            </div>
+          </fieldset>
+          <div className="field-row">
+            <AmountField
+              id="ord-size"
+              testid="bid-amount"
+              label={`Buy up to (${U.symbol} face value)`}
+              value={size}
+              onChange={(v) => {
+                setSize(v);
                 runner.reset();
               }}
-              aria-invalid={discountValid ? undefined : true}
-              data-testid="bid-discount"
+              error={size ? parsedSize.error : null}
             />
-            {discountValid ? (
-              <span className="hint">Your bid never fills below this discount.</span>
-            ) : (
-              <span className="hint text-bad">Enter a discount from 0 to {formatBps(meta.maxDiscountBps, 0)}</span>
-            )}
-          </div>
-        </div>
-        <fieldset className="fieldset">
-          <legend className="label">Escrow in</legend>
-          <div className="toggle-group">
-            {meta.payTokens.map((t, i) => (
-              <button
-                key={t.address}
-                type="button"
-                className="toggle toggle--pill"
-                aria-pressed={i === payIdx}
-                onClick={() => {
-                  setPayIdx(i);
+            <div className="field">
+              <label className="label" htmlFor="ord-disc">
+                Only at a discount of at least (%)
+              </label>
+              <input
+                id="ord-disc"
+                className="input input--mono"
+                inputMode="decimal"
+                value={discount}
+                onChange={(e) => {
+                  setDiscount(e.target.value);
                   runner.reset();
                 }}
-                data-testid={`bid-escrow-${t.symbol}`}
-              >
-                {t.symbol}
-              </button>
-            ))}
+                aria-invalid={discountValid ? undefined : true}
+                data-testid="bid-discount"
+              />
+              {discountValid ? (
+                <span className="hint">Your bid never fills below this discount.</span>
+              ) : (
+                <span className="hint text-bad">Enter a discount from 0 to {formatBps(meta.maxDiscountBps, 0)}</span>
+              )}
+            </div>
           </div>
-          <span className="hint" data-testid="bid-escrow-needed">
-            {escrowHint}
-          </span>
-        </fieldset>
-        {short && payToken && <Notice tone="warn">You hold less {payToken.symbol} than this bid needs in escrow.</Notice>}
-        {escrow.error != null && <Notice tone="danger">Can't price the escrow: {describeError(escrow.error)}</Notice>}
-        {address && blocked && <Notice tone="warn">{wallet.writeBlockedReason}</Notice>}
-        <button
-          type="button"
-          className="btn btn--primary btn--lg"
-          disabled={!canPlace}
-          onClick={() => void place()}
-          data-testid="bid-submit"
-        >
-          {busy ? "Working…" : "Escrow and place bid"}
-        </button>
-        <TxStatus state={runner.state} />
-        {address && balance.data === 0n && <DemoFunds kits={["bidder"]} compact />}
-        <p className="small muted">
-          Funds are escrowed when you place the bid, so sellers can count on it and it adds to the pool's exit capacity. Cancel
-          anytime; it takes effect at once and the unused escrow comes straight back.
-        </p>
-      </section>
+          <fieldset className="fieldset">
+            <legend className="label">Escrow in</legend>
+            <div className="toggle-group">
+              {meta.payTokens.map((t, i) => (
+                <button
+                  key={t.address}
+                  type="button"
+                  className="toggle toggle--pill"
+                  aria-pressed={i === payIdx}
+                  onClick={() => {
+                    setPayIdx(i);
+                    runner.reset();
+                  }}
+                  data-testid={`bid-escrow-${t.symbol}`}
+                >
+                  {t.symbol}
+                </button>
+              ))}
+            </div>
+            <span className="hint" data-testid="bid-escrow-needed">
+              {escrowHint}
+            </span>
+          </fieldset>
+          {short && payToken && <Notice tone="warn">You hold less {payToken.symbol} than this bid needs in escrow.</Notice>}
+          {escrow.error != null && <Notice tone="danger">Can't price the escrow: {describeError(escrow.error)}</Notice>}
+          {address && blocked && <Notice tone="warn">{wallet.writeBlockedReason}</Notice>}
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            disabled={!canPlace}
+            onClick={() => void place()}
+            data-testid="bid-submit"
+          >
+            {busy ? "Working…" : "Escrow and place bid"}
+          </button>
+          <TxStatus state={runner.state} />
+          {address && balance.data === 0n && <DemoFunds kits={["bidder"]} compact />}
+          <p className="small muted">
+            Funds are escrowed when you place the bid, so sellers can count on it and it adds to the pool's exit capacity. Cancel
+            anytime; it takes effect at once and the unused escrow comes straight back.
+          </p>
+        </section>
+      )}
       <section className="card card--pad stack-sm" aria-labelledby="h-mybids">
         <h2 id="h-mybids" className="h2-sm">
           Your bids

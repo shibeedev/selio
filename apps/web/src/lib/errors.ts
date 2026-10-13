@@ -2,13 +2,16 @@ import { decodeErrorResult, type Abi, type Hex } from "viem";
 import {
   aaveCollateralRouteAbi,
   aaveExitMarketAbi,
+  kuruMarginAccountAbi,
+  kuruOrderBookAbi,
+  kuruSellRouterAbi,
   morphoVaultExitMarketAbi,
   priceRouterAbi,
   selioVaultAbi,
   testTokenAbi,
 } from "@selio/sdk";
 
-/** Every custom error of the market, vault, route, price router and test token ABIs. */
+/** Every custom error of the market, vault, route, price router, test token, Kuru router and Kuru ABIs. */
 const ERROR_ABI = [
   aaveExitMarketAbi,
   morphoVaultExitMarketAbi,
@@ -16,6 +19,9 @@ const ERROR_ABI = [
   aaveCollateralRouteAbi,
   priceRouterAbi,
   testTokenAbi,
+  kuruSellRouterAbi,
+  kuruOrderBookAbi,
+  kuruMarginAccountAbi,
 ].flatMap((abi) => (abi as Abi).filter((item) => item.type === "error")) as Abi;
 
 const MESSAGES: Record<string, string> = {
@@ -55,6 +61,15 @@ const MESSAGES: Record<string, string> = {
   InsufficientShares: "The deposit would mint fewer vault shares than the preview allows. Refresh and try again.",
   UnknownMarket: "The route works only with the Selio markets it was deployed with.",
   SourceNotTight: "The yield source is below 90% utilization, so nothing needs to be pulled back.",
+  NotSelf: "Only the Selio Vault itself can run that step.",
+  NothingToClaim: "There is nothing to claim yet: Kuru has not been reachable since your share was set aside.",
+  SlippageExceeded: "Kuru would pay less than the sale's minimum now. Refresh the preview, or sell on Selio only.",
+  SizeError: "That size is outside what the Kuru market accepts per order.",
+  MarketStateError: "The Kuru market is paused right now.",
+  PostOnlyError: "That bid would buy at once from a Kuru ask; a limit bid only rests in the book. Lower the price.",
+  TickSizeError: "That price is not on the Kuru market's price grid.",
+  InsufficientBalance: "Your Kuru margin account holds less than that.",
+  ProtocolPaused: "Kuru is paused right now, including withdrawals from its margin account.",
 };
 
 const PANICS: Record<number, string> = {

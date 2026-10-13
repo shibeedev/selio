@@ -1,5 +1,5 @@
 import type { Address, Hex, PublicClient } from "viem";
-import { aaveExitMarketAbi, type SelioClient } from "@selio/sdk";
+import { aaveExitMarketAbi, kuruSellRouterAbi, type SelioClient } from "@selio/sdk";
 
 const deployBlocks = new Map<string, Promise<bigint>>();
 
@@ -66,7 +66,8 @@ export interface SellerFill {
   payToken: Address | null;
   discountBps: number;
   txHash: Hex | null;
-  via: "borrower" | "bid";
+  /** "kuru": the Kuru part of a sale routed through KuruSellRouter, which pays no Selio fee. */
+  via: "borrower" | "bid" | "kuru";
 }
 
 export interface SellerHistory {
@@ -76,13 +77,73 @@ export interface SellerHistory {
   fills: SellerFill[];
 }
 
+/** The Kuru part of a routed sale: the face value sold on Kuru for what Kuru paid, in the underlying, with no Selio fee. */
+export function kuruSaleFill(sale: { kuruAssets: bigint; kuruOut: bigint; txHash: Hex | null }, underlying: Address): SellerFill | null {
+  if (sale.kuruAssets === 0n) return null;
+  const discountBps =
+    sale.kuruOut >= sale.kuruAssets ? 0 : Number(((sale.kuruAssets - sale.kuruOut) * 10_000n) / sale.kuruAssets);
+  return {
+    sessionId: 0n,
+    assets: sale.kuruAssets,
+    paid: sale.kuruOut,
+    fee: 0n,
+    payToken: underlying,
+    discountBps,
+    txHash: sale.txHash,
+    via: "kuru",
+  };
+}
+
+export interface SellNowRow {
+  key: string;
+  label: string;
+  fills: SellerFill[];
+}
+
+/** Sell-now fills (session 0), one row per transaction; a routed sale's row covers its Selio bids and its Kuru part. */
+export function sellNowRows(fills: readonly SellerFill[]): SellNowRow[] {
+  const groups = new Map<string, SellerFill[]>();
+  fills
+    .filter((f) => f.sessionId === 0n)
+    .forEach((f, n) => {
+      const key = f.txHash ?? `fill-${n}`;
+      groups.set(key, [...(groups.get(key) ?? []), f]);
+    });
+  return [...groups].map(([key, group]) => {
+    const kuru = group.some((f) => f.via === "kuru");
+    const bids = group.some((f) => f.via !== "kuru");
+    const label = kuru && bids ? "Sold now to bids and Kuru" : kuru ? "Sold now on Kuru" : "Sold now to bids";
+    return { key, label, fills: group };
+  });
+}
+
 export async function loadSellerHistory(selio: SelioClient, seller: Address): Promise<SellerHistory> {
   const fromBlock = await fromBlockOf(selio);
   const market = { address: selio.deployment.market, abi: aaveExitMarketAbi, fromBlock, strict: true } as const;
-  const [opened, bidFills] = await Promise.all([
+  const router = selio.deployment.kuruSellRouter;
+  const [opened, ownFills, routedSales] = await Promise.all([
     selio.client.getContractEvents({ ...market, eventName: "SessionOpened", args: { seller } }),
     selio.client.getContractEvents({ ...market, eventName: "BidFilled", args: { seller } }),
+    router
+      ? selio.client.getContractEvents({
+          address: router,
+          abi: kuruSellRouterAbi,
+          eventName: "KuruRoutedSale",
+          args: { seller },
+          fromBlock,
+          strict: true,
+        })
+      : Promise.resolve([]),
   ]);
+  // In a routed sale the router is the market's seller: its bid fills in the seller's routed transactions are theirs.
+  const routedTxs = new Set(routedSales.map((log) => log.transactionHash));
+  const routerFills =
+    router && routedTxs.size > 0
+      ? (await selio.client.getContractEvents({ ...market, eventName: "BidFilled", args: { seller: router } })).filter((log) =>
+          routedTxs.has(log.transactionHash),
+        )
+      : [];
+  const bidFills = [...ownFills, ...routerFills];
   const sessionIds = opened.map((log) => log.args.sessionId);
   const bidIds = [...new Set(bidFills.map((log) => log.args.bidId))];
   const [bought, placed] = await Promise.all([
@@ -115,6 +176,13 @@ export async function loadSellerHistory(selio: SelioClient, seller: Address): Pr
       txHash: log.transactionHash ?? null,
       via: "bid" as const,
     })),
+    ...routedSales.flatMap((log) => {
+      const fill = kuruSaleFill(
+        { kuruAssets: log.args.kuruAssets, kuruOut: log.args.kuruOut, txHash: log.transactionHash ?? null },
+        selio.deployment.underlying,
+      );
+      return fill ? [fill] : [];
+    }),
   ];
   return { opened: new Map(opened.map((log) => [log.args.sessionId, log.args.assets])), fills };
 }

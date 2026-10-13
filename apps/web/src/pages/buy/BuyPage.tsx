@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Address } from "viem";
+import { isAddressEqual, zeroAddress, type Address } from "viem";
 import type { BorrowerPosition, SelioClient, SessionView, TokenInfo } from "@selio/sdk";
 import { DemoFunds } from "../../components/DemoFunds";
 import { DeploymentGate } from "../../components/DeploymentGate";
@@ -78,6 +78,20 @@ function BuyBody({ selio, meta }: { selio: SelioClient; meta: MarketMeta }) {
     reloadKey: refreshKey,
   });
 
+  // An Aave borrower who already holds the frozen receipt (or its static wrapper) can repay with it at face value.
+  const heldReceipts = useAsync(
+    async () => {
+      const wrapper = selio.deployment.kuruWrapper;
+      const [receipt, wrapped] = await Promise.all([
+        selio.balanceOf(meta.receipt.address, address as Address),
+        wrapper && !isAddressEqual(wrapper, zeroAddress) ? selio.balanceOf(wrapper, address as Address) : Promise.resolve(0n),
+      ]);
+      return receipt + wrapped;
+    },
+    [selio, address],
+    { enabled: !!address && meta.venue === "aave", reloadKey: refreshKey },
+  );
+
   const debt = borrower.data?.position.debt;
   const sessions = open.data?.sessions ?? [];
   const session = sessions.find((s) => s.id === selected) ?? sessions[0];
@@ -112,6 +126,11 @@ function BuyBody({ selio, meta }: { selio: SelioClient; meta: MarketMeta }) {
         <div className="stack-sm">
           <DemoFunds kits={["borrower"]} compact />
         </div>
+      )}
+      {meta.venue === "aave" && debt !== undefined && debt > 0n && (heldReceipts.data ?? 0n) > 0n && (
+        <Notice tone="info" testid="buy-atoken-hint">
+          You can also repay with receipts you hold at face value through Aave's repay-with-aTokens.
+        </Notice>
       )}
       <div className="split split--top">
         <OpenAuctions meta={meta} open={open} debt={debt} currentId={session?.id ?? null} onSelect={setSelected} />

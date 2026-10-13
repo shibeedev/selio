@@ -1,15 +1,17 @@
-import type { BidView } from "@selio/sdk";
+import type { BidView, SelioClient } from "@selio/sdk";
+import { KuruBook } from "../../components/KuruBook";
 import { Notice } from "../../components/ui";
 import { describeError } from "../../lib/errors";
 import { findToken } from "../../lib/fees";
 import { formatBps, formatToken } from "../../lib/format";
 import type { AsyncState } from "../../lib/hooks";
+import { hasKuru } from "../../lib/kuru";
 import { receiptNoun, type MarketMeta } from "../../lib/market";
 import { BID_OWNER_LABEL, bidOwner } from "../../lib/orderbook";
 import { useWallet } from "../../lib/wallet-context";
 
-/** The public book of escrowed bids, smallest discount first. */
-export function OrderBook({ meta, book }: { meta: MarketMeta; book: AsyncState<BidView[]> }) {
+/** The public book of escrowed bids, smallest discount first, and the receipt's Kuru book on a Kuru network. */
+export function OrderBook({ selio, meta, book }: { selio: SelioClient; meta: MarketMeta; book: AsyncState<BidView[]> }) {
   const { address } = useWallet();
   const U = meta.underlying;
   const rows = (book.data ?? []).filter((b) => b.capacityAssets > 0n);
@@ -51,6 +53,7 @@ export function OrderBook({ meta, book }: { meta: MarketMeta; book: AsyncState<B
           {formatToken(total, U)}
         </span>
       </div>
+      {hasKuru(selio) && <KuruBook selio={selio} meta={meta} />}
     </aside>
   );
 }

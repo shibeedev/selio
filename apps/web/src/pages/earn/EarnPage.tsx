@@ -52,7 +52,7 @@ function EarnBody({ selio, meta }: { selio: SelioClient; meta: MarketMeta }) {
             <LimitBidsSection selio={selio} meta={meta} bids={book.data} />
           )}
         </div>
-        <OrderBook meta={meta} book={book} />
+        <OrderBook selio={selio} meta={meta} book={book} />
       </div>
     </div>
   );
