@@ -4,6 +4,7 @@ import {
   BPS,
   morphoMarketId,
   type MorphoMarketParams,
+  type RoutedSellPlan,
   type SellerQuote,
   type SessionView,
   type TokenInfo,
@@ -39,7 +40,7 @@ import {
   type ResolvedPayToken,
   type ToolContext,
 } from "./common.js";
-import { perToken } from "./read.js";
+import { kuruLegView, perToken, routeNotes, routedPlanFor, useKuruSchema } from "./read.js";
 
 /** Default headroom on maxPay when the price depends on oracle prices (pay token is not the underlying). */
 export const PRICE_BUFFER_BPS = 50n;
@@ -585,6 +586,7 @@ export const buildSellNowShape = {
   minFilled: amountSchema
     .optional()
     .describe("Revert unless at least this much face value sells. Defaults to the amount the current bids can absorb."),
+  useKuru: useKuruSchema,
 };
 export type BuildSellNowArgs = z.infer<z.ZodObject<typeof buildSellNowShape>>;
 
@@ -599,7 +601,9 @@ export async function buildSellNow(ctx: ToolContext, args: BuildSellNowArgs): Pr
     sdk.payTokens(),
   ]);
   const assets = parsePositiveAmount(args.assets, underlying.decimals, "assets");
-  const plan = await sdk.planSellNow(assets, args.maxDiscountBps, pay.mask);
+  const routed = await routedPlanFor(h, args.useKuru, assets, args.maxDiscountBps, pay.mask);
+  if (routed?.kuru) return buildRoutedSell(h, args, routed, { from, assets, underlying, receipt, allTokens });
+  const plan = routed ? routed.selio : await sdk.planSellNow(assets, args.maxDiscountBps, pay.mask);
   if (plan.filledAssets === 0n) {
     throw new ToolError(
       `No escrowed bid buys at or below ${pct(args.maxDiscountBps)} in ${pay.tokens.map((t) => t.symbol).join("/")}. Raise maxDiscountBps or open a session with build_open_session.`,
@@ -640,6 +644,52 @@ export async function buildSellNow(ctx: ToolContext, args: BuildSellNowArgs): Pr
     proceeds: perToken(allTokens, plan.proceeds),
     fees: perToken(allTokens, plan.fees),
     sellerNet: perToken(allTokens, plan.sellerNet),
+    ...(routed ? { route: routed.route } : {}),
+  });
+}
+
+/** Sell now through KuruSellRouter: the Selio part into escrowed bids and the Kuru part on the order book, atomically. */
+async function buildRoutedSell(
+  h: NetworkHandle,
+  args: BuildSellNowArgs,
+  plan: RoutedSellPlan,
+  t: { from: Address | undefined; assets: bigint; underlying: TokenInfo; receipt: TokenInfo; allTokens: TokenInfo[] },
+): Promise<BuildResult> {
+  const { deployment, sdk } = h;
+  const router = deployment.kuruSellRouter as Address;
+  if (args.minFilled !== undefined) {
+    const minFilled = parseAmount(args.minFilled, t.underlying.decimals, "minFilled");
+    if (minFilled > plan.filledAssets) {
+      throw new ToolError(
+        `Selio's bids and the Kuru book can only absorb ${formatUnits(plan.filledAssets, t.underlying.decimals)} ${t.underlying.symbol}, below minFilled.`,
+      );
+    }
+  }
+  const kuru = await kuruLegView(h, plan.kuru as NonNullable<RoutedSellPlan["kuru"]>);
+  const [amount, feeBps] = await Promise.all([sdk.routedSellApproval(plan), sdk.feeBps()]);
+  const approval = await approvalIfNeeded(sdk, t.receipt, t.from, router, amount, "the Kuru sell router");
+  const sell = sdk.routedSell(plan, t.from ?? zeroAddress);
+  const notes = [
+    ...approval.notes,
+    ...routeNotes(plan, kuru.takerFeeBps),
+    `The Selio part must fill exactly as planned and the Kuru part pay at least ${kuru.minOut.human} ${t.underlying.symbol}; proceeds and anything unsold return to ${t.from ?? "the sender"} in the same transaction.`,
+    `Selio takes ${pct(feeBps)} of each Selio fill's payment as its fee; sellerNet is the Selio part the seller receives, kuru.expectedOut the Kuru part.`,
+  ];
+  if (plan.filledAssets < t.assets) {
+    notes.push(
+      `Only ${formatUnits(plan.filledAssets, t.underlying.decimals)} of ${args.assets} ${t.underlying.symbol} can be sold now; open a session for the rest with build_open_session.`,
+    );
+  }
+  return buildResult(h, args.network, [...approval.transactions, sell], notes, {
+    route: plan.route,
+    filled: amountView(plan.filledAssets, t.underlying),
+    averageDiscount: bpsView(plan.averageDiscountBps),
+    bidIds: plan.selio.bidIds.map((id) => id.toString()),
+    proceeds: perToken(t.allTokens, plan.selio.proceeds),
+    fees: perToken(t.allTokens, plan.selio.fees),
+    sellerNet: perToken(t.allTokens, plan.selio.sellerNet),
+    kuru,
+    router,
   });
 }
 

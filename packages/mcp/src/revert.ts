@@ -3,6 +3,9 @@ import { formatAbiItem } from "viem/utils";
 import {
   aaveCollateralRouteAbi,
   aaveExitMarketAbi,
+  kuruMarginAccountAbi,
+  kuruOrderBookAbi,
+  kuruSellRouterAbi,
   morphoVaultExitMarketAbi,
   priceRouterAbi,
   selioVaultAbi,
@@ -19,6 +22,9 @@ function errorItems(): AbiError[] {
     aaveCollateralRouteAbi,
     priceRouterAbi,
     testTokenAbi,
+    kuruSellRouterAbi,
+    kuruOrderBookAbi,
+    kuruMarginAccountAbi,
   ];
   const seen = new Set<string>();
   const errors: AbiError[] = [];
@@ -34,7 +40,7 @@ function errorItems(): AbiError[] {
   return errors;
 }
 
-/** Custom errors of every Selio contract; Error(string) and Panic(uint256) are decoded by viem itself. */
+/** Custom errors of every Selio contract and of the Kuru calls a routed sale makes; Error(string) and Panic(uint256) are decoded by viem itself. */
 export const SELIO_ERRORS_ABI: readonly AbiError[] = errorItems();
 
 export interface DecodedRevert {

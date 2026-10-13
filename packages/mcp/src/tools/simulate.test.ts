@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   aaveCollateralRouteAbi,
   aaveExitMarketAbi,
+  kuruMarginAccountAbi,
+  kuruOrderBookAbi,
+  kuruSellRouterAbi,
   morphoVaultExitMarketAbi,
   priceRouterAbi,
   selioVaultAbi,
@@ -44,6 +47,19 @@ describe("decodeRevert", () => {
     expect(decodeRevert(badPrice)?.name).toBe("BadPrice");
     const mintLimit = encodeErrorResult({ abi: testTokenAbi, errorName: "MintLimit" });
     expect(decodeRevert(mintLimit)?.name).toBe("MintLimit");
+  });
+
+  it("decodes the Kuru order book, margin account and KuruSellRouter errors of a routed sale", () => {
+    const slippage = encodeErrorResult({ abi: kuruOrderBookAbi, errorName: "SlippageExceeded" });
+    expect(slippage).toBe("0x8199f5f3");
+    expect(decodeRevert(slippage)).toEqual({ name: "SlippageExceeded", signature: "SlippageExceeded()", args: [] });
+    expect(decodeRevert(encodeErrorResult({ abi: kuruOrderBookAbi, errorName: "MarketStateError" }))?.name).toBe(
+      "MarketStateError",
+    );
+    expect(decodeRevert(encodeErrorResult({ abi: kuruMarginAccountAbi, errorName: "InsufficientBalance" }))?.name).toBe(
+      "InsufficientBalance",
+    );
+    expect(decodeRevert(encodeErrorResult({ abi: kuruSellRouterAbi, errorName: "BadParams" }))?.name).toBe("BadParams");
   });
 
   it("decodes Error(string) and returns null for unknown or missing data", () => {

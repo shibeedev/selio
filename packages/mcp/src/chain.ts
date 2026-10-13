@@ -50,6 +50,12 @@ export type MarketSdk = Pick<
   | "vaultDeposit"
   | "vaultRedeem"
   | "routeRepayWithFrozenCollateral"
+  | "kuruMarket"
+  | "kuruFacePerBase"
+  | "kuruBook"
+  | "planRoutedSell"
+  | "routedSellApproval"
+  | "routedSell"
 >;
 
 export type CallOutcome = { ok: true; returnData: Hex } | { ok: false; revertData?: Hex; message: string };

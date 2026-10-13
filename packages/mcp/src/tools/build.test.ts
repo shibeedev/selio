@@ -14,6 +14,7 @@ import { z } from "zod";
 import {
   aaveCollateralRouteAbi,
   aaveExitMarketAbi,
+  kuruSellRouterAbi,
   morphoMarketId,
   selioVaultAbi,
   type BidView,
@@ -21,7 +22,18 @@ import {
   type MorphoMarketParams,
   type SellPlan,
 } from "@selio/sdk";
-import { AAVE_DEPLOYMENT, ADDR, MORPHO_DEPLOYMENT, fakeChain, fakeNetwork, session } from "../testing/fakes.js";
+import {
+  AAVE_DEPLOYMENT,
+  ADDR,
+  KURU_AAVE_DEPLOYMENT,
+  KURU_MARKET,
+  MORPHO_DEPLOYMENT,
+  ROUTED_SALE,
+  SELIO_LEG,
+  fakeChain,
+  fakeNetwork,
+  session,
+} from "../testing/fakes.js";
 import {
   VAULT_DEPOSIT_SLIPPAGE_BPS,
   buildBuyAndRepay,
@@ -482,6 +494,86 @@ describe("build_sell_now", () => {
     await expect(buildSellNow(ctx, { network: "usdt0-replay", assets: "3", maxDiscountBps: 500 })).rejects.toThrow(
       /No escrowed bid/,
     );
+  });
+});
+
+describe("build_sell_now with Kuru", () => {
+  function onKuru() {
+    const env = onAave(KURU_AAVE_DEPLOYMENT);
+    vi.spyOn(env.net.sdk, "kuruMarket").mockResolvedValue(KURU_MARKET);
+    return env;
+  }
+
+  it("builds the routed sale through KuruSellRouter and the receipt approval to the router", async () => {
+    const { net, ctx } = onKuru();
+    const routed = vi.spyOn(net.sdk, "planRoutedSell").mockResolvedValue(ROUTED_SALE);
+    const res = await buildSellNow(ctx, {
+      network: "usdt0-replay",
+      from: ADDR.seller,
+      assets: "120",
+      maxDiscountBps: 5_000,
+      payTokens: ["USDT0"],
+    });
+    expect(routed).toHaveBeenCalledWith(120_000_000n, 5_000, 0b0100);
+    expectUnsigned(res);
+    const [approve, sell] = res.transactions;
+    expect(approve?.to).toBe(ADDR.aMonUSDT0);
+    // Aave receipts: both legs plus 10 wei for each transfer (one Selio fill, the pull and the wrap).
+    expect(approval(approve).args).toEqual([ADDR.kuruSellRouter, 69_891_800n + 50_108_201n + 30n]);
+    expect(sell?.to).toBe(ADDR.kuruSellRouter);
+    expect(sell?.description).toBe("Sell receipts now: Selio bids and the Kuru order book, best price per unit");
+    expect(decodeFunctionData({ abi: kuruSellRouterAbi, data: sell!.data })).toEqual({
+      functionName: "sell",
+      args: [
+        {
+          selioAssets: 69_891_800n,
+          bidIds: [1n],
+          maxDiscountBps: 5_000,
+          payMask: 0b0100,
+          selioMinFilled: 69_891_800n,
+          kuruAssets: 50_108_201n,
+          kuruMinOut: 48_755_000n,
+          to: ADDR.seller,
+        },
+      ],
+    });
+    expect(res.details).toMatchObject({
+      route: "selio+kuru",
+      filled: { raw: "120000000" },
+      bidIds: ["1"],
+      sellerNet: [{ raw: "67659456", symbol: "USDT0" }],
+      kuru: { expectedOut: { raw: "49000000" }, minOut: { raw: "48755000" }, takerFeeBps: 0 },
+      router: ADDR.kuruSellRouter,
+    });
+    expect(res.notes.join(" ")).toMatch(/the Kuru part pay at least 48\.755 USDT0/);
+  });
+
+  it("skips the approval when the router allowance already covers it, and checks minFilled", async () => {
+    const { net, ctx } = onKuru();
+    vi.spyOn(net.sdk, "planRoutedSell").mockResolvedValue(ROUTED_SALE);
+    vi.spyOn(net.sdk, "allowance").mockResolvedValue(maxUint256);
+    const res = await buildSellNow(ctx, { network: "usdt0-replay", from: ADDR.seller, assets: "120", maxDiscountBps: 5_000 });
+    expect(res.transactions).toHaveLength(1);
+    expect(res.transactions[0]?.to).toBe(ADDR.kuruSellRouter);
+    await expect(
+      buildSellNow(ctx, { network: "usdt0-replay", assets: "120", maxDiscountBps: 5_000, minFilled: "121" }),
+    ).rejects.toThrow(/Kuru book can only absorb 120 USDT0, below minFilled/);
+  });
+
+  it("sends the plain sellNow when the routed plan keeps to Selio's bids, or with useKuru false", async () => {
+    const { net, ctx } = onKuru();
+    vi.spyOn(net.sdk, "planRoutedSell").mockResolvedValue({ ...ROUTED_SALE, kuru: null, route: "selio" });
+    const selioOnly = vi.spyOn(net.sdk, "planSellNow").mockResolvedValue(SELIO_LEG);
+    const res = await buildSellNow(ctx, { network: "usdt0-replay", assets: "120", maxDiscountBps: 5_000 });
+    expect(selioOnly).not.toHaveBeenCalled();
+    const [approve, sell] = res.transactions;
+    expect(approval(approve).args).toEqual([ADDR.market, 69_891_800n]);
+    expect(market(sell)).toMatchObject({ functionName: "sellNow", args: [69_891_800n, [1n], 5_000, 0b1111, 69_891_800n] });
+    expect(res.details).toMatchObject({ route: "selio" });
+    const off = await buildSellNow(ctx, { network: "usdt0-replay", assets: "120", maxDiscountBps: 5_000, useKuru: false });
+    expect(selioOnly).toHaveBeenCalledTimes(1);
+    expect(market(off.transactions[1]).functionName).toBe("sellNow");
+    expect(off.details).not.toHaveProperty("route");
   });
 });
 

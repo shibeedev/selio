@@ -1,6 +1,15 @@
 import { createPublicClient, custom, getAddress, zeroAddress, type Address, type PublicClient } from "viem";
 import { vi, type Mock } from "vitest";
-import { NETWORKS, SelioClient, type Deployment, type NetworkKey, type SessionView } from "@selio/sdk";
+import {
+  NETWORKS,
+  SelioClient,
+  type Deployment,
+  type KuruMarketInfo,
+  type NetworkKey,
+  type RoutedSellPlan,
+  type SellPlan,
+  type SessionView,
+} from "@selio/sdk";
 import type { ChainReads, NetworkHandle, SelioChain } from "../chain.js";
 import { NETWORK_KEYS } from "../config.js";
 import { ToolError } from "../errors.js";
@@ -32,6 +41,11 @@ export const ADDR = {
   oracle: a(0x2008),
   irm: a(0x2009),
   waMonUSDC: a(0x200a),
+  waMonUSDT0: a(0x3001),
+  kuruBook: a(0x3002),
+  kuruRouter: a(0x3003),
+  kuruMargin: a(0x3004),
+  kuruSellRouter: a(0x3005),
   user: a(0xbeef),
   seller: a(0x5e11),
   bidder: a(0xb1d),
@@ -52,6 +66,72 @@ export const AAVE_DEPLOYMENT: Deployment = {
   aavePool: ADDR.aavePool,
   debtToken: ADDR.debtToken,
   collateralRoute: ADDR.route,
+};
+
+/** usdt0-replay with its waMonUSDT0/USDT0 Kuru market. */
+export const KURU_AAVE_DEPLOYMENT: Deployment = {
+  ...AAVE_DEPLOYMENT,
+  kuruRouter: ADDR.kuruRouter,
+  kuruMarginAccount: ADDR.kuruMargin,
+  kuruMarket: ADDR.kuruBook,
+  kuruBase: ADDR.waMonUSDT0,
+  kuruWrapper: ADDR.waMonUSDT0,
+  kuruSellRouter: ADDR.kuruSellRouter,
+};
+
+export const KURU_MARKET: KuruMarketInfo = {
+  book: ADDR.kuruBook,
+  base: { address: ADDR.waMonUSDT0, symbol: "waMonUSDT0", decimals: 6 },
+  quote: { address: ADDR.USDT0, symbol: "USDT0", decimals: 6 },
+  wrapper: ADDR.waMonUSDT0,
+  pricePrecision: 1_000_000,
+  sizePrecision: 1_000_000n,
+  tickSize: 100,
+  minSize: 1_000_000n,
+  maxSize: 10n ** 15n,
+  takerFeeBps: 0,
+  makerFeeBps: 0,
+};
+
+/** The Selio part of the routed worked example: 69.8918 USDT0 into a 3% bid paying USDT0. */
+export const SELIO_LEG: SellPlan = {
+  bidIds: [1n],
+  fills: [
+    {
+      bidId: 1n,
+      assets: 69_891_800n,
+      pay: 67_795_046n,
+      fee: 135_590n,
+      sellerNet: 67_659_456n,
+      payToken: ADDR.USDT0,
+      discountBps: 300,
+    },
+  ],
+  filledAssets: 69_891_800n,
+  proceeds: { [ADDR.USDT0]: 67_795_046n },
+  fees: { [ADDR.USDT0]: 135_590n },
+  sellerNet: { [ADDR.USDT0]: 67_659_456n },
+  averageDiscountBps: 300,
+};
+
+/** A routed sale of 120 USDT0: the Selio part above and 50 waMonUSDT0 into a Kuru level at 0.98. */
+export const ROUTED_SALE: RoutedSellPlan = {
+  selio: SELIO_LEG,
+  kuru: {
+    receiptAssets: 50_108_201n,
+    baseAmount: 50_000_000n,
+    size: 50_000_000n,
+    expectedOut: 49_000_000n,
+    minOut: 48_755_000n,
+    displacedValue: 48_108_545n,
+    levels: [{ price: 980_000, faceAssets: 50_108_200n }],
+  },
+  filledAssets: 120_000_000n,
+  route: "selio+kuru",
+  averageDiscountBps: 267,
+  netValue: 116_659_456n,
+  maxDiscountBps: 5_000,
+  payMask: 0b0100,
 };
 
 export const MORPHO_DEPLOYMENT: Deployment = {
@@ -86,6 +166,7 @@ export const TOKENS: Record<Address, { symbol: string; decimals: number }> = {
   [ADDR.morphoWETH]: { symbol: "WETH", decimals: 18 },
   [ADDR.morphoVault]: { symbol: "slUSDC", decimals: 9 },
   [ADDR.waMonUSDC]: { symbol: "waMonUSDC", decimals: 6 },
+  [ADDR.waMonUSDT0]: { symbol: "waMonUSDT0", decimals: 6 },
 };
 
 /** A PublicClient that fails every request, so tests cannot reach a network. */
