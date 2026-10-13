@@ -1520,7 +1520,9 @@ p {
 }
 
 /* ---------- tables ---------- */
+/* Positioned so screen-reader-only labels in cells stay inside the scroller instead of widening the page. */
 .table-wrap {
+  position: relative;
   overflow-x: auto;
   border-radius: 12px;
   border: 1px solid var(--border-2);
