@@ -135,6 +135,44 @@ contract KuruTestnetForkTest is Test, MorphoStack {
         assertEq(router.facePerBase(), earn.previewRedeem(1e18));
     }
 
+    /// @dev Read-only check of the live deployment recorded in deployments/monad-testnet.json: the Kuru market, the
+    /// router and the Selio Vault's Kuru leg are wired to each other, with Selio's market parameters.
+    function test_forkTestnet_kuru_liveDeploymentIsWired() public view {
+        string memory json = vm.readFile("deployments/monad-testnet.json");
+        IKuruOrderBook liveBook = IKuruOrderBook(vm.parseJsonAddress(json, ".kuruMarket"));
+        KuruSellRouter liveRouter = KuruSellRouter(vm.parseJsonAddress(json, ".kuruSellRouter"));
+        SelioVault liveVault = SelioVault(vm.parseJsonAddress(json, ".selioVault"));
+        address eUsdc = vm.parseJsonAddress(json, ".receipt");
+        assertEq(vm.parseJsonAddress(json, ".kuruRouter"), address(KURU_ROUTER));
+        assertEq(vm.parseJsonAddress(json, ".kuruMarginAccount"), address(MA));
+        assertEq(vm.parseJsonAddress(json, ".kuruBase"), eUsdc, "the market trades the Earn vault's shares");
+        assertEq(vm.parseJsonAddress(json, ".kuruWrapper"), address(0));
+        KuruMarketParams memory p = liveBook.getMarketParams();
+        assertEq(p.base, eUsdc);
+        assertEq(p.quote, USDC);
+        assertEq(p.pricePrecision, 1e6);
+        assertEq(p.sizePrecision, 1e6);
+        assertEq(p.tickSize, 100);
+        assertEq(p.minSize, 1e6);
+        assertEq(p.maxSize, 1e15);
+        assertEq(p.takerFeeBps, 0);
+        assertEq(p.makerFeeBps, 0);
+        assertEq(KURU_ROUTER.verifiedMarket(address(liveBook)).base, eUsdc, "registered with Kuru's Router");
+        assertEq(address(liveRouter.book()), address(liveBook));
+        assertEq(address(liveRouter.market()), vm.parseJsonAddress(json, ".market"));
+        assertEq(address(liveRouter.wrapper()), address(0));
+        (address book, address margin, address wrapper,, uint32 price,,,) = liveVault.kuruLeg(0);
+        assertEq(book, address(liveBook));
+        assertEq(margin, address(MA));
+        assertEq(wrapper, address(0));
+        assertEq(liveVault.kuruShareBps(), 5_000);
+        (bool active,,,) = liveVault.kuruOrderState(0);
+        if (active) {
+            uint256 face = IVaultV2(eUsdc).previewRedeem(1e18);
+            assertGe(KuruMath.discountOf(price, face, p), 300, "a resting vault bid is at least 3% below face");
+        }
+    }
+
     function test_forkTestnet_kuru_vaultOrderWithVaultShares() public {
         _deposit(depositor, 1_000e6);
         (,,, uint40 orderId, uint32 price, uint96 placedSize, uint256 escrow,) = ev.kuruLeg(0);
