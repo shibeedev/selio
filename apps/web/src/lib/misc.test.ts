@@ -77,6 +77,44 @@ describe("deployment files", () => {
     expect((await loadDeployment("monad-testnet", "/", html)).status).toBe("missing");
     expect((await loadDeployment("monad-testnet", "/", json)).status).toBe("ready");
   });
+
+  const serving = (files: Record<string, unknown>) => {
+    const urls: string[] = [];
+    const impl = (async (url: string) => {
+      urls.push(url);
+      return url in files
+        ? new Response(JSON.stringify(files[url]), { status: 200 })
+        : new Response(JSON.stringify({ code: "NOT_FOUND", message: "Not deployed" }), { status: 404 });
+    }) as unknown as typeof fetch;
+    return { urls, impl };
+  };
+  const API = "https://api.selio.site";
+  const fork = {
+    ...morphoDeployment,
+    network: "usdt0-replay",
+    chainId: 143,
+    venue: "aave",
+    aavePool: a(9),
+    debtToken: a(10),
+  };
+
+  it("loads a fork's deployment from the backend", async () => {
+    const api = serving({ [`${API}/deployments/usdt0-replay.json`]: fork });
+    expect((await loadDeployment("usdt0-replay", "/", api.impl, API)).status).toBe("ready");
+    expect(api.urls).toEqual([`${API}/deployments/usdt0-replay.json`]);
+    const none = serving({});
+    expect((await loadDeployment("vault-freeze", "/", none.impl, API)).status).toBe("missing");
+    expect(none.urls).toEqual([`${API}/deployments/vault-freeze.json`]);
+  });
+
+  it("loads the live network's bundled file, and asks the backend only when the build has none", async () => {
+    const bundled = serving({ "/deployments/monad-testnet.json": morphoDeployment });
+    expect((await loadDeployment("monad-testnet", "/", bundled.impl, API)).status).toBe("ready");
+    expect(bundled.urls).toEqual(["/deployments/monad-testnet.json"]);
+    const fallback = serving({ [`${API}/deployments/monad-testnet.json`]: morphoDeployment });
+    expect((await loadDeployment("monad-testnet", "/", fallback.impl, API)).status).toBe("ready");
+    expect(fallback.urls).toEqual(["/deployments/monad-testnet.json", `${API}/deployments/monad-testnet.json`]);
+  });
 });
 
 describe("order book", () => {
