@@ -164,17 +164,17 @@ function UtilizationOverTime({ buckets }: { buckets: readonly Bucket[] }) {
 type Bucket = { t: number; p: IndexedCapacityPoint };
 
 const ROUTES: ChartLine<Bucket>[] = [
-  { key: "withdrawable", label: "Withdrawable now", color: "var(--purple-100)", value: (b) => b.p.withdrawable },
-  { key: "debtors", label: "Exit via borrowers", color: "var(--purple-300)", value: (b) => b.p.debtorCapacity },
-  { key: "bids", label: "Bids at up to 20% off", color: "var(--purple-600)", value: (b) => b.p.bidAt2000 },
+  { key: "withdrawable", label: "Withdrawable now", color: "var(--series-1)", value: (b) => b.p.withdrawable },
+  { key: "debtors", label: "Exit via borrowers", color: "var(--series-3)", value: (b) => b.p.debtorCapacity },
+  { key: "bids", label: "Bids at up to 20% off", color: "var(--series-5)", value: (b) => b.p.bidAt2000 },
 ];
 
 const DEPTH: ChartLine<Bucket>[] = [
-  { key: "100", label: "≤ 1%", color: "var(--purple-100)", value: (b) => b.p.bidAt100 },
-  { key: "300", label: "≤ 3%", color: "var(--purple-200)", value: (b) => b.p.bidAt300 },
-  { key: "500", label: "≤ 5%", color: "var(--purple-300)", value: (b) => b.p.bidAt500 },
-  { key: "1000", label: "≤ 10%", color: "var(--purple-400)", value: (b) => b.p.bidAt1000 },
-  { key: "2000", label: "≤ 20%", color: "var(--purple-600)", value: (b) => b.p.bidAt2000 },
+  { key: "100", label: "≤ 1%", color: "var(--series-1)", value: (b) => b.p.bidAt100 },
+  { key: "300", label: "≤ 3%", color: "var(--series-2)", value: (b) => b.p.bidAt300 },
+  { key: "500", label: "≤ 5%", color: "var(--series-3)", value: (b) => b.p.bidAt500 },
+  { key: "1000", label: "≤ 10%", color: "var(--series-4)", value: (b) => b.p.bidAt1000 },
+  { key: "2000", label: "≤ 20%", color: "var(--series-5)", value: (b) => b.p.bidAt2000 },
 ];
 
 /** Utilization, exit routes and bid depth over time, reconstructed by the index from on-chain events. */

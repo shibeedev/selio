@@ -64,7 +64,7 @@ export function VaultHistory({ client, selio, meta, range }: HistoryPanelProps) 
   );
 
   const shareValue: ChartLine<Point>[] = [
-    { key: "share", label: `${U.symbol} per ${meta.vault.symbol}`, color: "var(--purple-300)", value: (p) => p.value },
+    { key: "share", label: `${U.symbol} per ${meta.vault.symbol}`, color: "var(--chart-line)", value: (p) => p.value },
   ];
 
   let body;

@@ -1,76 +1,96 @@
 /*
-  Selio web app: dark "liquid glass". Frosted, translucent panels with thin light borders and a soft inner
-  highlight float over a deep black page lit by faint purple glows. Purple, white and black carry the brand;
-  the muted status colours appear only for Open, Tight and Frozen and for warnings and errors.
-  Every colour is a token.
+  Selio web app: light "liquid glass". Frosted white panels with bright lit edges, a fine violet outline and soft
+  violet shadows float over a white-to-lavender page lit by slow lilac glows. Purple carries the brand on white
+  and deep violet ink; the status colours appear only for Open, Tight and Frozen and for warnings and errors.
+  Every colour is a token. Text colours are checked for WCAG AA (4.5:1) on the darkest lavender surface they sit on.
 */
 
 /* ---------- tokens ---------- */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --bg: #040207;
-  --text: #f4f1ff;
-  --text-2: #c5bedb;
-  --muted: #958eae;
+  --bg: #f4f1fc;
+  --text: #1b1233;
+  --text-2: #453b61;
+  --muted: #5d5376;
 
-  --glass: rgba(255, 255, 255, 0.045);
-  --glass-2: rgba(255, 255, 255, 0.075);
-  --glass-3: rgba(255, 255, 255, 0.11);
-  /* Frosted dark glass: a white sheen that fades down over a dark violet tint, so the glows behind show through
-     dimmed and text keeps its contrast. */
-  --glass-card:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.026) 38%, rgba(255, 255, 255, 0.014) 100%),
-    rgba(12, 8, 26, 0.4);
-  --glass-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.016) 55%), rgba(8, 5, 18, 0.24);
-  --glass-tile: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(8, 5, 18, 0.3);
-  --glass-menu: rgba(17, 12, 30, 0.88);
-  --glass-header: rgba(9, 6, 17, 0.62);
-  --glass-field: rgba(4, 2, 10, 0.55);
-  --border: rgba(255, 255, 255, 0.11);
-  --border-2: rgba(255, 255, 255, 0.075);
-  --border-top: rgba(255, 255, 255, 0.2);
-  --border-strong: rgba(255, 255, 255, 0.2);
-  --line: rgba(255, 255, 255, 0.065);
-  --sheen: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --sheen-soft: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --inner-glow: inset 0 22px 48px -32px rgba(185, 155, 255, 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.012);
-  --inner-glow-soft: inset 0 16px 36px -28px rgba(185, 155, 255, 0.16);
-  --blur: saturate(170%) blur(24px);
-  --shadow: 0 28px 64px -34px rgba(0, 0, 0, 0.95);
-  --menu-shadow: 0 32px 80px -24px rgba(0, 0, 0, 0.9);
+  --glass: rgba(255, 255, 255, 0.5);
+  --glass-2: rgba(255, 255, 255, 0.72);
+  --glass-3: rgba(255, 255, 255, 0.92);
+  /* Frosted white glass: a bright sheen from the top left over translucent white, so the lilac glows behind
+     show through softened. */
+  --glass-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 44%);
+  --glass-card: var(--glass-sheen), rgba(255, 255, 255, 0.6);
+  --glass-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.34) 100%);
+  --glass-tile: linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.56) 100%);
+  --glass-menu: rgba(255, 255, 255, 0.84);
+  --glass-header: rgba(255, 255, 255, 0.6);
+  --glass-field: rgba(255, 255, 255, 0.86);
+  /* Glass edges are white; lines inside the glass are violet so they stay visible on white. */
+  --edge: rgba(255, 255, 255, 0.8);
+  --border: rgba(109, 40, 217, 0.16);
+  --border-2: rgba(109, 40, 217, 0.1);
+  --border-top: rgba(255, 255, 255, 0.95);
+  --border-strong: rgba(109, 40, 217, 0.32);
+  --line: rgba(109, 40, 217, 0.09);
+  --ring: 0 0 0 1px rgba(76, 29, 149, 0.07);
+  --sheen: inset 1px 1px 0 rgba(255, 255, 255, 0.95), inset -1px -1px 0 rgba(255, 255, 255, 0.35);
+  --sheen-soft: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --inner-glow: inset 0 -18px 40px -32px rgba(167, 139, 250, 0.35);
+  --inner-glow-soft: inset 0 -14px 30px -26px rgba(167, 139, 250, 0.25);
+  --blur: saturate(180%) blur(22px);
+  --shadow: var(--ring), 0 1px 2px rgba(46, 16, 101, 0.06), 0 14px 34px -18px rgba(46, 16, 101, 0.3);
+  --shadow-lift: 0 0 0 1px rgba(76, 29, 149, 0.1), 0 2px 4px rgba(46, 16, 101, 0.07), 0 20px 42px -18px rgba(76, 29, 149, 0.38);
+  --menu-shadow: 0 0 0 1px rgba(76, 29, 149, 0.08), 0 2px 6px rgba(46, 16, 101, 0.08), 0 30px 70px -24px rgba(46, 16, 101, 0.42);
 
-  --purple-100: #e9e0ff;
-  --purple-200: #d3bfff;
-  --purple-300: #b99bff;
-  --purple-400: #a07cff;
+  --purple-100: #ede5ff;
+  --purple-200: #dccdff;
+  --purple-300: #c2abff;
+  --purple-400: #a98cfb;
   --purple-500: #8b5cf6;
-  --purple-600: #7040e2;
-  --purple-700: #5425cf;
-  --accent: var(--purple-500);
-  --accent-fill: linear-gradient(180deg, #9466fa 0%, #6c3be1 100%);
-  --accent-fill-hover: linear-gradient(180deg, #a27bff 0%, #7a4bea 100%);
-  --accent-text: #cbbaff;
-  --accent-hover: #ebe3ff;
-  --accent-soft: rgba(139, 92, 246, 0.16);
-  --accent-soft-2: rgba(139, 92, 246, 0.09);
-  --accent-border: rgba(167, 139, 250, 0.42);
-  --accent-glow: 0 0 0 1px rgba(139, 92, 246, 0.16), 0 30px 80px -40px rgba(124, 77, 255, 0.65);
-  --focus: #b99bff;
+  --purple-600: #7c3aed;
+  --purple-700: #6d28d9;
+  --purple-800: #4c1d95;
+  --accent: var(--purple-600);
+  --accent-fill: linear-gradient(180deg, #8a4dfa 0%, #6a2ee0 100%);
+  --accent-fill-hover: linear-gradient(180deg, #7c3aed 0%, #5b21b6 100%);
+  --accent-text: var(--purple-700);
+  --accent-hover: var(--purple-800);
+  --accent-ink: var(--purple-800);
+  --accent-ink-2: #5b4290;
+  --accent-soft: rgba(124, 58, 237, 0.1);
+  --accent-soft-2: rgba(124, 58, 237, 0.06);
+  --accent-border: rgba(124, 58, 237, 0.32);
+  --accent-glow: 0 0 0 1px rgba(124, 58, 237, 0.16), 0 1px 2px rgba(46, 16, 101, 0.06), 0 24px 54px -28px rgba(109, 40, 217, 0.55);
+  /* Deep violet ink: the "dark" button and the selected tab. */
+  --ink-fill: linear-gradient(180deg, #34206b 0%, #22144a 100%);
+  --ink-fill-hover: linear-gradient(180deg, #432a85 0%, #2b1a5c 100%);
+  --focus: var(--purple-600);
 
-  --open: #8bd8c2;
-  --open-soft: rgba(139, 216, 194, 0.12);
-  --tight: #e8be7d;
-  --tight-soft: rgba(232, 190, 125, 0.11);
-  --tight-border: rgba(232, 190, 125, 0.3);
-  --tight-text: #f1d8ad;
-  --frozen: #f29db4;
-  --frozen-soft: rgba(242, 157, 180, 0.11);
-  --frozen-border: rgba(242, 157, 180, 0.3);
-  --frozen-text: #f8ccd8;
+  --open: #096b50;
+  --open-fill: #12936c;
+  --open-soft: rgba(16, 150, 110, 0.12);
+  --open-border: rgba(9, 107, 80, 0.28);
+  --tight: #8f4f00;
+  --tight-fill: #b06d00;
+  --tight-soft: rgba(245, 165, 36, 0.18);
+  --tight-border: rgba(176, 109, 0, 0.34);
+  --tight-text: #6b3b00;
+  --frozen: #b8204a;
+  --frozen-fill: #d6325f;
+  --frozen-soft: rgba(225, 45, 90, 0.1);
+  --frozen-border: rgba(184, 32, 74, 0.3);
+  --frozen-text: #8c1636;
 
-  --chart-fill-top: rgba(139, 92, 246, 0.34);
-  --chart-fill-bottom: rgba(139, 92, 246, 0);
+  --chart-line: var(--purple-600);
+  --chart-fill-top: rgba(124, 58, 237, 0.24);
+  --chart-fill-bottom: rgba(124, 58, 237, 0);
+  /* One-hue ramp, light to dark, for charts with several lines (each line also has a legend label). */
+  --series-1: #9d78f0;
+  --series-2: #7c3aed;
+  --series-3: #6224cc;
+  --series-4: #45188a;
+  --series-5: #2b0f5e;
 
   --radius: 14px;
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -95,13 +115,17 @@ body {
   background: var(--bg);
 }
 
-/* The body's own stacking context puts the glow and grain layers above its black background and below the page. */
+/* The body's own stacking context puts the glow and grain layers above its background and below the page. */
 body {
   isolation: isolate;
 }
 
+html {
+  scrollbar-color: rgba(109, 40, 217, 0.32) transparent;
+}
+
 /*
-  Purple and violet glows drift slowly behind every panel, so the frosted glass has light to blur. Two fixed layers
+  Lilac and violet glows drift slowly behind every panel, so the frosted glass has colour to blur. Two fixed layers
   move in opposite directions; only their transform animates, so the browser composites them without repainting.
   The layers overhang the viewport so their edges never show while they drift.
 */
@@ -116,28 +140,29 @@ body::before,
 
 body::before {
   background:
-    radial-gradient(34vmax 25vmax at 24% 22%, rgba(124, 77, 255, 0.3), transparent 70%),
-    radial-gradient(30vmax 22vmax at 80% 30%, rgba(84, 37, 207, 0.27), transparent 70%),
-    radial-gradient(40vmax 26vmax at 52% 94%, rgba(160, 124, 255, 0.15), transparent 72%);
+    radial-gradient(34vmax 26vmax at 22% 18%, rgba(167, 139, 250, 0.34), transparent 70%),
+    radial-gradient(30vmax 22vmax at 84% 22%, rgba(240, 190, 255, 0.4), transparent 70%),
+    radial-gradient(42vmax 28vmax at 58% 96%, rgba(196, 181, 253, 0.42), transparent 72%),
+    linear-gradient(165deg, #fbfaff 0%, #f3effd 55%, #ebe4fb 100%);
   animation: glow-drift-a 46s ease-in-out infinite alternate;
 }
 
 .app::before {
   background:
-    radial-gradient(26vmax 20vmax at 68% 64%, rgba(139, 92, 246, 0.2), transparent 70%),
-    radial-gradient(22vmax 17vmax at 14% 76%, rgba(112, 64, 226, 0.18), transparent 70%);
+    radial-gradient(26vmax 20vmax at 70% 62%, rgba(186, 160, 255, 0.24), transparent 70%),
+    radial-gradient(22vmax 17vmax at 12% 74%, rgba(221, 198, 255, 0.36), transparent 70%);
   animation: glow-drift-b 61s ease-in-out infinite alternate;
 }
 
-/* A faint, static grain over the glows keeps the dark glass from looking like flat colour. */
+/* A faint, static violet grain over the glows keeps the white glass from looking like flat colour. */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.06 0 0 0 0 0.4 0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   background-size: 180px 180px;
 }
 
@@ -182,8 +207,8 @@ p {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.45);
-  color: #fff;
+  background: rgba(124, 58, 237, 0.22);
+  color: var(--text);
 }
 
 :focus-visible {
@@ -344,10 +369,7 @@ p {
   line-height: 1.08;
   letter-spacing: -0.015em;
   max-width: 20ch;
-  background: linear-gradient(180deg, #ffffff 35%, #cdbaff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--text);
 }
 
 .page-head h1 {
@@ -396,7 +418,7 @@ p {
 }
 
 .eyebrow {
-  color: var(--purple-300);
+  color: var(--accent-text);
 }
 
 .kicker {
@@ -447,7 +469,7 @@ p {
   height: 10px;
   margin-left: 8px;
   border: 2px solid var(--border-strong);
-  border-top-color: var(--purple-300);
+  border-top-color: var(--purple-600);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   vertical-align: -1px;
@@ -480,9 +502,9 @@ p {
   position: relative;
   z-index: 10;
   color: var(--text);
-  background: var(--glass-header);
-  border-bottom: 1px solid var(--border-2);
-  box-shadow: var(--sheen);
+  background: var(--glass-sheen), var(--glass-header);
+  border-bottom: 1px solid var(--edge);
+  box-shadow: var(--sheen-soft), 0 1px 0 rgba(76, 29, 149, 0.08), 0 10px 26px -20px rgba(46, 16, 101, 0.35);
 }
 
 .header-inner {
@@ -511,7 +533,7 @@ p {
 .logo-mark {
   display: block;
   flex: none;
-  filter: drop-shadow(0 4px 14px rgba(124, 77, 255, 0.45));
+  filter: drop-shadow(0 4px 10px rgba(109, 40, 217, 0.28));
 }
 
 .brand-name {
@@ -542,10 +564,10 @@ p {
 }
 
 .nav-link[aria-current="page"] {
-  color: var(--text);
+  color: var(--accent-ink);
   font-weight: 600;
-  background: var(--glass-2);
-  box-shadow: inset 0 -2px 0 var(--purple-400);
+  background: var(--glass-3);
+  box-shadow: var(--sheen-soft), var(--ring), inset 0 -2px 0 var(--purple-600);
 }
 
 .header-right {
@@ -589,7 +611,7 @@ p {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--glass-2);
-  box-shadow: var(--sheen);
+  box-shadow: var(--sheen), 0 6px 16px -12px rgba(46, 16, 101, 0.35);
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -661,14 +683,14 @@ p {
 }
 
 .dot--live {
-  background: var(--purple-300);
-  box-shadow: 0 0 0 3px rgba(185, 155, 255, 0.16), 0 0 12px rgba(185, 155, 255, 0.7);
+  background: var(--purple-600);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.16), 0 0 10px rgba(124, 58, 237, 0.5);
 }
 
 .dot--fork,
 .dot--warn {
-  background: var(--tight);
-  box-shadow: 0 0 0 3px rgba(232, 190, 125, 0.14);
+  background: var(--tight-fill);
+  box-shadow: 0 0 0 3px rgba(176, 109, 0, 0.16);
 }
 
 /* dropdown menus */
@@ -681,8 +703,8 @@ p {
   max-width: calc(100vw - 32px);
   padding: 8px;
   border-radius: 16px;
-  border: 1px solid var(--border);
-  background: var(--glass-menu);
+  border: 1px solid var(--edge);
+  background: var(--glass-sheen), var(--glass-menu);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   box-shadow: var(--sheen), var(--menu-shadow);
@@ -724,7 +746,7 @@ p {
 
 .net-option:hover,
 .menu-option:hover {
-  background: var(--glass-2);
+  background: var(--accent-soft-2);
 }
 
 .net-option[aria-pressed="true"] {
@@ -772,12 +794,12 @@ p {
 }
 
 .ctx-bar--live {
-  background: rgba(139, 92, 246, 0.11);
-  color: var(--purple-100);
+  background: rgba(124, 58, 237, 0.08);
+  color: var(--accent-ink);
 }
 
 .ctx-bar--fork {
-  background: rgba(232, 190, 125, 0.09);
+  background: rgba(245, 165, 36, 0.16);
   color: var(--tight-text);
 }
 
@@ -808,8 +830,9 @@ p {
 
 /* footer */
 .site-footer {
-  border-top: 1px solid var(--border-2);
-  background: rgba(9, 6, 17, 0.5);
+  border-top: 1px solid var(--edge);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 -1px 0 rgba(76, 29, 149, 0.06);
   font-size: 13.5px;
   color: var(--muted);
 }
@@ -833,7 +856,7 @@ p {
 /* ---------- surfaces ---------- */
 .card {
   background: var(--glass-card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--edge);
   border-top-color: var(--border-top);
   border-radius: var(--radius);
   backdrop-filter: var(--blur);
@@ -846,21 +869,22 @@ p {
 }
 
 .card--lg {
-  border-radius: 18px;
+  border-radius: 20px;
   padding: 22px 24px;
 }
 
 /* The card that holds the page's main action. */
 .card--feature {
   border-color: var(--accent-border);
-  border-top-color: rgba(205, 185, 255, 0.55);
+  border-top-color: rgba(124, 58, 237, 0.4);
   box-shadow: var(--sheen), var(--inner-glow), var(--accent-glow);
 }
 
+/* The accent card (the MCP server on Developers): lavender glass with violet ink. */
 .card--dark {
-  background: linear-gradient(160deg, rgba(112, 64, 226, 0.36) 0%, rgba(38, 16, 92, 0.48) 100%);
-  border-color: rgba(185, 155, 255, 0.32);
-  color: #ffffff;
+  background: var(--glass-sheen), linear-gradient(160deg, rgba(237, 229, 255, 0.86) 0%, rgba(220, 205, 255, 0.72) 100%);
+  border-color: var(--accent-border);
+  color: var(--text);
 }
 
 .panel {
@@ -869,7 +893,7 @@ p {
   gap: 10px;
   padding: 18px 20px;
   border: 1px solid var(--border-2);
-  border-top-color: var(--border);
+  border-top-color: var(--border-top);
   border-radius: var(--radius);
   background: var(--glass-panel);
   box-shadow: var(--sheen-soft), var(--inner-glow-soft);
@@ -892,8 +916,8 @@ p {
 
 .notice--info {
   background: var(--accent-soft-2);
-  border-color: rgba(167, 139, 250, 0.26);
-  color: var(--purple-100);
+  border-color: rgba(124, 58, 237, 0.2);
+  color: var(--accent-ink);
 }
 
 .notice--warn {
@@ -911,7 +935,7 @@ p {
 .notice--success {
   background: var(--accent-soft);
   border-color: var(--accent-border);
-  color: var(--purple-100);
+  color: var(--accent-ink);
 }
 
 .notice b {
@@ -931,7 +955,7 @@ p {
 
 .chip--open {
   background: var(--open-soft);
-  border-color: rgba(139, 216, 194, 0.28);
+  border-color: var(--open-border);
   color: var(--open);
 }
 
@@ -948,7 +972,7 @@ p {
 }
 
 .chip--neutral {
-  background: var(--glass-2);
+  background: var(--glass-3);
   border-color: var(--border);
   color: var(--text-2);
 }
@@ -965,8 +989,8 @@ p {
   height: 8px;
   overflow: hidden;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  background: rgba(109, 40, 217, 0.1);
+  box-shadow: inset 0 1px 2px rgba(46, 16, 101, 0.12);
 }
 
 .util-fill {
@@ -976,16 +1000,16 @@ p {
 }
 
 .util-fill--open {
-  background: var(--open);
+  background: var(--open-fill);
 }
 
 .util-fill--tight {
-  background: var(--tight);
+  background: var(--tight-fill);
 }
 
 .util-fill--frozen {
-  background: var(--frozen);
-  box-shadow: 0 0 10px rgba(242, 157, 180, 0.55);
+  background: var(--frozen-fill);
+  box-shadow: 0 0 8px rgba(214, 50, 95, 0.4);
 }
 
 .who {
@@ -997,11 +1021,11 @@ p {
   white-space: nowrap;
 }
 
-/* Darker than the button fill: white 12.5 px text needs 4.5:1. */
+/* White 12.5 px text needs 4.5:1: purple-600 gives 5.7:1. */
 .who--vault {
   background: linear-gradient(180deg, var(--purple-600) 0%, var(--purple-700) 100%);
   color: #ffffff;
-  box-shadow: 0 0 14px rgba(124, 77, 255, 0.45);
+  box-shadow: 0 4px 12px -4px rgba(109, 40, 217, 0.55);
 }
 
 .who--mine {
@@ -1010,7 +1034,8 @@ p {
 }
 
 .who--other {
-  background: var(--glass-2);
+  background: var(--glass-3);
+  box-shadow: var(--ring);
   color: var(--text-2);
 }
 
@@ -1035,12 +1060,12 @@ p {
 .yield-block {
   padding: 12px 14px 14px;
   border-radius: var(--radius);
-  border: 1px solid rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(124, 58, 237, 0.2);
   background: var(--accent-soft-2);
 }
 
 .stats--yield .stat {
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--glass-2);
 }
 
 .stat-label {
@@ -1134,11 +1159,11 @@ p {
 .highlight--good {
   background: var(--accent-soft);
   border-color: var(--accent-border);
-  box-shadow: 0 0 30px -12px rgba(139, 92, 246, 0.7);
+  box-shadow: 0 10px 26px -16px rgba(124, 58, 237, 0.55);
 }
 
 .highlight--good .highlight-label {
-  color: var(--purple-100);
+  color: var(--accent-ink);
 }
 
 .highlight--good .highlight-value {
@@ -1151,15 +1176,15 @@ p {
   gap: 8px;
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(167, 139, 250, 0.26);
+  border: 1px solid rgba(124, 58, 237, 0.2);
   background: var(--accent-soft-2);
   font-size: 14.5px;
-  color: var(--purple-100);
+  color: var(--accent-ink);
 }
 
 .flash-box .summary-label,
 .flash-box .small {
-  color: var(--purple-200);
+  color: var(--accent-ink-2);
 }
 
 .details {
@@ -1190,8 +1215,8 @@ p {
   justify-content: center;
   gap: 8px;
   min-height: 44px;
-  padding: 0 16px;
-  border-radius: 11px;
+  padding: 0 18px;
+  border-radius: 999px;
   border: 1px solid transparent;
   font-size: 14.5px;
   font-weight: 600;
@@ -1203,20 +1228,21 @@ p {
 
 .btn--primary {
   background: var(--accent-fill);
+  border-color: rgba(76, 29, 149, 0.3);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 26px -14px rgba(124, 77, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36), inset 0 -1px 0 rgba(46, 16, 101, 0.2), 0 8px 20px -10px rgba(109, 40, 217, 0.75);
 }
 
 .btn--primary:hover:not(:disabled) {
   background: var(--accent-fill-hover);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 14px 32px -14px rgba(139, 92, 246, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36), inset 0 -1px 0 rgba(46, 16, 101, 0.24), 0 12px 26px -10px rgba(109, 40, 217, 0.85);
 }
 
 .btn--secondary {
   background: var(--glass-2);
   border-color: var(--border);
-  box-shadow: var(--sheen);
+  box-shadow: var(--sheen), 0 6px 16px -12px rgba(46, 16, 101, 0.35);
   color: var(--text);
 }
 
@@ -1228,19 +1254,21 @@ p {
 
 .btn--dark {
   align-self: flex-start;
-  background: var(--text);
-  color: #0c0716;
+  background: var(--ink-fill);
+  border-color: rgba(46, 16, 101, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 8px 18px -10px rgba(46, 16, 101, 0.7);
+  color: #ffffff;
 }
 
 .btn--dark:hover {
-  background: #ffffff;
-  color: #0c0716;
+  background: var(--ink-fill-hover);
+  color: #ffffff;
 }
 
 .btn:disabled,
 .btn:disabled:hover {
   cursor: not-allowed;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.45);
   border-color: var(--border-2);
   box-shadow: none;
   color: var(--muted);
@@ -1248,8 +1276,8 @@ p {
 
 .btn--small {
   min-height: 40px;
-  padding: 0 12px;
-  border-radius: 9px;
+  padding: 0 14px;
+  border-radius: 999px;
   font-size: 13.5px;
 }
 
@@ -1271,6 +1299,7 @@ p {
   padding: 0 16px;
   border: 1px solid var(--border);
   background: var(--glass);
+  box-shadow: var(--sheen-soft);
   color: var(--text);
   font-size: 14.5px;
   font-weight: 600;
@@ -1299,16 +1328,17 @@ p {
 
 .toggle--pill[aria-pressed="true"] {
   background: var(--accent-fill);
-  border-color: rgba(185, 155, 255, 0.5);
+  border-color: rgba(76, 29, 149, 0.3);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 6px 16px -10px rgba(109, 40, 217, 0.75);
 }
 
 .toggle--tab[aria-pressed="true"],
 .toggle--dark[aria-pressed="true"] {
-  background: var(--text);
-  border-color: var(--text);
-  color: #0c0716;
+  background: var(--ink-fill);
+  border-color: rgba(46, 16, 101, 0.4);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 6px 16px -10px rgba(46, 16, 101, 0.7);
 }
 
 /* choice cards */
@@ -1339,9 +1369,9 @@ p {
 
 .choice[aria-pressed="true"] {
   padding: 13px 15px;
-  border: 2px solid var(--purple-400);
+  border: 2px solid var(--purple-600);
   background: var(--accent-soft);
-  box-shadow: 0 0 34px -16px rgba(139, 92, 246, 0.9);
+  box-shadow: 0 12px 28px -18px rgba(124, 58, 237, 0.7);
 }
 
 .choice--card {
@@ -1447,7 +1477,7 @@ p {
   border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--glass-field);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 2px rgba(46, 16, 101, 0.1);
   color: var(--text);
   font-size: 15px;
   transition: border-color 140ms ease, box-shadow 140ms ease;
@@ -1486,7 +1516,8 @@ p {
   overflow-x: auto;
   border-radius: 12px;
   border: 1px solid var(--border-2);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: var(--sheen-soft);
 }
 
 .data {
@@ -1503,7 +1534,7 @@ p {
 .data th {
   padding: 11px 14px;
   border-bottom: 1px solid var(--border-2);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(124, 58, 237, 0.05);
   text-align: left;
   font-size: 12.5px;
   font-weight: 600;
@@ -1532,7 +1563,7 @@ p {
 
 .row-selected {
   background: var(--accent-soft-2);
-  box-shadow: inset 3px 0 0 var(--purple-400);
+  box-shadow: inset 3px 0 0 var(--purple-600);
 }
 
 .cell-title {
@@ -1575,14 +1606,14 @@ p {
 
 .tx-status--info {
   background: var(--accent-soft-2);
-  border-color: rgba(167, 139, 250, 0.24);
-  color: var(--purple-100);
+  border-color: rgba(124, 58, 237, 0.22);
+  color: var(--accent-ink);
 }
 
 .tx-status--success {
   background: var(--accent-soft);
   border-color: var(--accent-border);
-  color: var(--purple-100);
+  color: var(--accent-ink);
 }
 
 .tx-status--danger {
@@ -1763,20 +1794,20 @@ p {
 }
 
 .chart-line {
-  stroke: var(--purple-300);
+  stroke: var(--chart-line);
   stroke-width: 2.5;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.75));
+  filter: drop-shadow(0 2px 4px rgba(124, 58, 237, 0.28));
 }
 
 .chart-dot {
-  fill: var(--purple-100);
-  stroke: var(--purple-500);
+  fill: #ffffff;
+  stroke: var(--chart-line);
   stroke-width: 2;
 }
 
 .chart-threshold {
-  stroke: var(--tight);
+  stroke: var(--tight-fill);
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
 }
@@ -1809,7 +1840,7 @@ p {
   padding: 8px 8px 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--border-2);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--glass-2);
 }
 
 .how-flow {
@@ -2065,7 +2096,8 @@ p {
   flex-direction: column;
   align-items: flex-start;
   height: auto;
-  padding: 8px 12px;
+  padding: 8px 14px;
+  border-radius: 14px;
   text-align: left;
 }
 
@@ -2095,7 +2127,7 @@ p {
 }
 
 .rules li::marker {
-  color: var(--purple-400);
+  color: var(--purple-600);
 }
 
 .book {
@@ -2169,7 +2201,7 @@ p {
 }
 
 .check-icon--idle {
-  background: var(--glass-2);
+  background: var(--glass-3);
   border-color: var(--border-2);
   color: var(--muted);
 }
@@ -2196,24 +2228,25 @@ p {
   padding: 14px 16px;
   overflow-x: auto;
   border-radius: 10px;
-  border: 1px solid var(--border-2);
-  background: rgba(0, 0, 0, 0.45);
-  box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.5);
-  color: #e7e1ff;
+  border: 1px solid var(--border);
+  background: rgba(247, 243, 255, 0.9);
+  box-shadow: inset 0 1px 3px rgba(46, 16, 101, 0.08);
+  color: #2a1d52;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.65;
 }
 
 .code--dark {
-  background: rgba(10, 3, 28, 0.62);
-  border-color: rgba(185, 155, 255, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--accent-border);
 }
 
 .dark-callout {
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  background: rgba(255, 255, 255, 0.6);
   font-size: 14.5px;
   line-height: 1.5;
 }
@@ -2227,9 +2260,9 @@ p {
 .dark-chip {
   padding: 5px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(185, 155, 255, 0.28);
-  background: rgba(139, 92, 246, 0.2);
-  color: var(--purple-100);
+  border: 1px solid var(--accent-border);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-ink);
   font-family: var(--mono);
   font-size: 13px;
 }
@@ -2242,7 +2275,7 @@ p {
   padding-left: 20px;
   font-size: 14.5px;
   line-height: 1.5;
-  color: var(--purple-100);
+  color: var(--accent-ink);
 }
 
 .link-strong {
