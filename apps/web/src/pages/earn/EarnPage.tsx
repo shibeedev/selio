@@ -15,7 +15,7 @@ export function EarnPage() {
   return (
     <div className="stack-lg">
       <section className="page-head" aria-labelledby="h-earn">
-        <h1 id="h-earn">Earn from frozen pools</h1>
+        <h1 id="h-earn">Earn from high-utilization pools</h1>
         <p className="lead">
           When a pool freezes, your capital buys stuck receipts below face value and redeems them at full value once the pool
           refills. Use the shared Selio Vault, whose waiting capital earns base yield, or set your own limit bids, whose escrow

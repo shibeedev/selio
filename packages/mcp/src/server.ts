@@ -22,7 +22,7 @@ export { decodeRevert } from "./revert.js";
 export const SERVER_NAME = "selio";
 export const SERVER_VERSION = "0.1.0";
 
-const INSTRUCTIONS = `Selio is an exit market for frozen lending pools on Monad (Aave V3 aMonUSDT0, Morpho USDC Earn vault shares).
+const INSTRUCTIONS = `Selio is an exit market for high-utilization lending pools on Monad (Aave V3 aMonUSDT0, Morpho USDC Earn vault shares).
 Depositors stuck in a ~100%-utilized pool sell their deposit receipts to same-asset borrowers (who repay debt at a discount in the same transaction), to escrowed limit bids, or to the Selio Vault.
 This server only reads on-chain data, simulates, and builds UNSIGNED transactions. It never holds keys and never signs: hand every transaction to the user's wallet.
 Amounts are human decimal strings in token units (for example "1.5"); outputs give both raw base units and human values. Discounts are basis points (100 = 1%).

@@ -2,7 +2,7 @@
   "name": "selio",
   "private": true,
   "version": "0.1.0",
-  "description": "Exit market for frozen lending pools on Monad",
+  "description": "Exit market for high-utilization lending pools on Monad",
   "license": "MIT",
   "workspaces": [
     "packages/*",
