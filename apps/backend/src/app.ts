@@ -3,6 +3,7 @@ import express from "express";
 import { createAlertsModule, type WebhookSender } from "./modules/alerts/index.js";
 import { createAuthModule } from "./modules/auth/index.js";
 import { createCapacityModule, type CapacityChainPort } from "./modules/capacity/index.js";
+import { createDeploymentsModule, type DeploymentsChainPort } from "./modules/deployments/index.js";
 import {
   createFaucetModule,
   type FaucetServiceOptions,
@@ -21,7 +22,11 @@ import { httpLogger, type Logger } from "./shared/middlewares/logger.js";
 import { rateLimit, type RequestLimits } from "./shared/middlewares/rateLimit.js";
 import { requestId } from "./shared/middlewares/requestId.js";
 
-export type AppChainPort = NetworksChainPort & CapacityChainPort & ForkkitChainPort & RpcChainPort;
+export type AppChainPort = NetworksChainPort &
+  DeploymentsChainPort &
+  CapacityChainPort &
+  ForkkitChainPort &
+  RpcChainPort;
 
 export interface AppDeps {
   db: Db;
@@ -93,6 +98,7 @@ export function createApp(deps: AppDeps) {
 
   app.use(createHealthModule({ db }).router);
   app.use(createNetworksModule({ chain }).router);
+  app.use(createDeploymentsModule({ chain }).router);
   app.use(capacity.router);
   app.use(auth.router);
   app.use(alerts.router);

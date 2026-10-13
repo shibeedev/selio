@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -9,9 +9,10 @@ import request from "supertest";
 import { createSiweMessage } from "viem/siwe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
-import { loadConfig } from "./config/index.js";
+import { DEFAULT_DEPLOYMENTS_DIR, loadConfig } from "./config/index.js";
 import type { WebhookPayload } from "./modules/alerts/index.js";
 import type { Db } from "./shared/db/database.js";
+import { ChainGateway } from "./shared/integrations/chain/chain.gateway.js";
 import {
   emptyMcpChain,
   fakeChain,
@@ -131,6 +132,97 @@ describe("GET /api/networks", () => {
       market: null,
       rpcReachable: false,
     });
+  });
+});
+
+describe("GET /deployments/:file", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "selio-deployments-"));
+    mkdirSync(join(dir, "local"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  /** An app whose deployment lookup is the chain gateway itself, on `deploymentsDir` and without RPC overrides. */
+  const appOn = (deploymentsDir: string, corsOrigin = "*") =>
+    createApp({
+      db,
+      logger: silentLogger,
+      chain: new ChainGateway({ deploymentsDir, rpcUrls: {} }),
+      mcpChain: emptyMcpChain,
+      corsOrigin,
+    }).app;
+  const write = (file: string, content: unknown) =>
+    writeFileSync(join(dir, file), typeof content === "string" ? content : JSON.stringify(content));
+  const noDeployment = (key: string) => ({ code: "NOT_FOUND", message: `No deployment for ${key}` });
+
+  it("serves the committed live deployment with every key, uncached", async () => {
+    const committed = JSON.parse(readFileSync(join(DEFAULT_DEPLOYMENTS_DIR, "monad-testnet.json"), "utf8"));
+    const res = await request(appOn(DEFAULT_DEPLOYMENTS_DIR)).get("/deployments/monad-testnet.json").expect(200);
+    expect(res.headers["content-type"]).toBe("application/json; charset=utf-8");
+    expect(res.headers["cache-control"]).toBe("no-cache");
+    expect(res.body).toEqual(committed);
+  });
+
+  it("serves a fork deployment from local/ with its optional keys", async () => {
+    const fork = {
+      ...USDT0_REPLAY_DEPLOYMENT,
+      deployer: "0x0000000000000000000000000000000000001009",
+      payATokens: ["0x000000000000000000000000000000000000100a"],
+      kuruRouter: "0x000000000000000000000000000000000000100b",
+      kuruMarginAccount: "0x000000000000000000000000000000000000100c",
+      kuruMarket: "0x000000000000000000000000000000000000100d",
+      kuruBase: "0x000000000000000000000000000000000000100e",
+      kuruWrapper: "0x0000000000000000000000000000000000000000",
+      kuruSellRouter: "0x000000000000000000000000000000000000100f",
+    };
+    write("local/usdt0-replay.json", fork);
+    // As for every deployment read, a live network's local/ file counts only when its RPC is overridden.
+    write("local/monad-testnet.json", { ...fork, network: "monad-testnet", chainId: 10143 });
+    const app = appOn(dir);
+    const res = await request(app).get("/deployments/usdt0-replay.json").expect(200);
+    expect(res.headers["cache-control"]).toBe("no-cache");
+    expect(res.body).toEqual(fork);
+    const live = await request(app).get("/deployments/monad-testnet.json").expect(404);
+    expect(live.body).toEqual(noDeployment("monad-testnet"));
+  });
+
+  it("answers 404 for an unknown key and for other file names, a traversal attempt included", async () => {
+    const app = appOn(DEFAULT_DEPLOYMENTS_DIR);
+    expect((await request(app).get("/deployments/mainnet.json").expect(404)).body).toEqual(noDeployment("mainnet"));
+    // From the deployments directory, ../../package.json is the repository's own package.json.
+    expect(existsSync(join(DEFAULT_DEPLOYMENTS_DIR, "..", "..", "package.json"))).toBe(true);
+    const traversal = await request(app).get("/deployments/..%2F..%2Fpackage.json").expect(404);
+    expect(traversal.body).toEqual(noDeployment("../../package"));
+    expect(traversal.headers["cache-control"]).toBe("no-cache");
+    for (const [file, key] of [
+      ["monad-testnet", "monad-testnet"],
+      ["MONAD-TESTNET.json", "MONAD-TESTNET"],
+    ] as const) {
+      expect((await request(app).get(`/deployments/${file}`).expect(404)).body).toEqual(noDeployment(key));
+    }
+  });
+
+  it("answers 404 for a malformed file and for a file of another network", async () => {
+    write("local/vault-freeze.json", "{not json");
+    write("monad-testnet.json", { network: "monad-testnet", chainId: 10143 });
+    write("local/usdt0-replay.json", { ...USDT0_REPLAY_DEPLOYMENT, network: "vault-freeze" });
+    const app = appOn(dir);
+    for (const key of ["vault-freeze", "monad-testnet", "usdt0-replay"]) {
+      expect((await request(app).get(`/deployments/${key}.json`).expect(404)).body).toEqual(noDeployment(key));
+    }
+  });
+
+  it("sends the CORS headers to an allowed origin, on a 404 too", async () => {
+    const app = appOn(DEFAULT_DEPLOYMENTS_DIR, "https://selio.site");
+    for (const [file, status] of [
+      ["monad-testnet.json", 200],
+      ["mainnet.json", 404],
+    ] as const) {
+      const res = await request(app).get(`/deployments/${file}`).set("Origin", "https://selio.site").expect(status);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://selio.site");
+      expect(res.headers.vary).toBe("Origin");
+    }
   });
 });
 
