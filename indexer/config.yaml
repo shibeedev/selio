@@ -59,7 +59,7 @@ contracts:
       - event: "AccrueInterest(bytes32 indexed id, uint256 prevBorrowRate, uint256 interest, uint256 feeShares)"
 chains:
   - id: 10143
-    start_block: 0 # deployment.deployBlock
+    start_block: 70734999 # deployment.deployBlock
     rpc:
       - url: https://testnet-rpc.monad.xyz
         for: fallback
@@ -67,10 +67,10 @@ chains:
         interval_ceiling: 100
     contracts:
       - name: SelioMarket
-        address: "0x0000000000000000000000000000000000000001" # deployment.market
+        address: "0x71541206d91607dde032f7d4a114dfc5a50aa91a" # deployment.market
       - name: SelioVault
-        address: "0x0000000000000000000000000000000000000002" # deployment.selioVault
+        address: "0xde01fbcff7eb15e63f6e259833326097aeb9465f" # deployment.selioVault
       - name: EarnVault
-        address: "0x0000000000000000000000000000000000000003" # deployment.earnVault
+        address: "0x4385eaf60c34989d5ed5df6a5c58881e8c25479f" # deployment.earnVault
       - name: Morpho
-        address: "0x0000000000000000000000000000000000000004" # deployment.morpho
+        address: "0x66dd7a6dc6e2b68c4c152297af8bb95e02325571" # deployment.morpho
