@@ -64,6 +64,14 @@ describe("rateLimit", () => {
     ]);
   });
 
+  it("counts the deployment files against the api limit, in any case", async () => {
+    const a = app({ api: 2, mcp: 10, rpc: 10 });
+    await request(a).get("/api/networks").expect(200);
+    await request(a).get("/deployments/usdt0-replay.json").expect(200);
+    await request(a).get("/Deployments/vault-freeze.json").expect(429);
+    expect(db.prepare("SELECT key FROM rate_limit_hits").all().map((r) => String(r.key))).toEqual(["api:127.0.0.1"]);
+  });
+
   it("keys on CF-Connecting-IP and buckets IPv6 by /64", async () => {
     const a = app({ api: 1, mcp: 10, rpc: 10 });
     await request(a).get("/api/x").set("CF-Connecting-IP", "203.0.113.7").expect(200);

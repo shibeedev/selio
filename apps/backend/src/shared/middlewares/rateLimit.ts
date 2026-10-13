@@ -22,13 +22,14 @@ export interface RateLimitOptions {
 /** Routing is case-insensitive, so the group is taken from the lower-cased path. */
 function groupOf(path: string): RateLimitGroup | null {
   const p = path.toLowerCase();
-  if (p.startsWith("/api/")) return "api";
+  // The deployment files are public reads like /api/*, so they share its limit.
+  if (p.startsWith("/api/") || p.startsWith("/deployments/")) return "api";
   if (p === "/mcp" || p.startsWith("/mcp/")) return "mcp";
   if (p.startsWith("/rpc/")) return "rpc";
   return null;
 }
 
-/** Per-IP fixed-window limits on /api/*, /mcp and /rpc/*; runs before body parsing. */
+/** Per-IP fixed-window limits on /api/* (with /deployments/*), /mcp and /rpc/*; runs before body parsing. */
 export function rateLimit({ limits, now, windowMs, max }: RateLimitOptions): RequestHandler {
   let lastPrune = Number.NEGATIVE_INFINITY;
   return (req, res, next) => {
