@@ -19,6 +19,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   aaveCollateralRouteAbi,
   aaveExitMarketAbi,
+  kuruMarginAccountAbi,
+  kuruOrderBookAbi,
+  kuruSellRouterAbi,
   morphoVaultExitMarketAbi,
   priceRouterAbi,
   selioVaultAbi,
@@ -41,7 +44,10 @@ const TEST_KEYS: readonly Hex[] = [
   "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 ];
 
-/** Same set as the web app: market, vault and route errors plus the price router's and the test token's. */
+/**
+ * Same set as the web app: market, vault and route errors plus the price router's and the test token's, then the
+ * Kuru sell router's and Kuru's own order book and margin account errors.
+ */
 const ERROR_ABIS: readonly Abi[] = [
   aaveExitMarketAbi,
   morphoVaultExitMarketAbi,
@@ -49,6 +55,9 @@ const ERROR_ABIS: readonly Abi[] = [
   aaveCollateralRouteAbi,
   priceRouterAbi,
   testTokenAbi,
+  kuruSellRouterAbi,
+  kuruOrderBookAbi,
+  kuruMarginAccountAbi,
 ];
 
 export interface Actor {
