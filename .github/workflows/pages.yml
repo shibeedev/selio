@@ -1,0 +1,50 @@
+name: Web app
+
+# Builds the web app and publishes it on GitHub Pages (custom domain selio.site, set by apps/web/public/CNAME).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build -w @selio/sdk
+      - run: npm run build -w @selio/web
+        env:
+          VITE_API_URL: https://api.selio.site
+          VITE_RPC_USDT0_REPLAY: https://api.selio.site/rpc/usdt0-replay
+          VITE_RPC_VAULT_FREEZE: https://api.selio.site/rpc/vault-freeze
+          VITE_AGENT_URL: https://agent.selio.site
+          VITE_DYNAMIC_ENVIRONMENT_ID: ${{ vars.DYNAMIC_ENVIRONMENT_ID }}
+          VITE_INDEXER_URL: ${{ vars.INDEXER_URL }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
