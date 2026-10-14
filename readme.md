@@ -130,6 +130,48 @@ Selio combines five parts:
 - **Index:** Envio HyperIndex.
 - **Wallets:** Dynamic SDK, browser wallets, and a built-in demo wallet.
 
-## 7. Use of AI
+## 7. How to install
+
+**Requirements:** Node 22.15 or later, npm 10 or later, git, and Foundry (`forge`, `anvil`). The indexer also needs Linux, macOS or WSL 2 with pnpm 10.
+
+**Build and test:**
+
+```bash
+git clone --recursive https://github.com/shibeedev/selio.git
+cd selio
+npm install
+cd contracts && forge build && cd ..
+npm run build -w @selio/sdk -w @selio/forkkit -w @selio/mcp
+npm run typecheck
+npm test
+```
+
+**Run locally:**
+
+```bash
+npm run fork:up -w @selio/e2e    # Monad mainnet forks: usdt0-replay on :8602 and vault-freeze on :8604, deployed and seeded
+npm run dev -w @selio/backend    # API on http://127.0.0.1:8787
+npm run dev -w @selio/web        # web app on http://localhost:5173
+npx selio-mcp                    # MCP server over stdio (after building @selio/mcp)
+```
+
+**Environment:** create a repo-root `.env` (never committed) for the forks and tools:
+
+- `MONAD_RPC`: Monad mainnet RPC (default `https://rpc.monad.xyz`), used by the vault-freeze fork.
+- `MONAD_ARCHIVE_RPC`: RPC with historical state at block 94,027,500 (default `https://rpc2.monad.xyz`), used by the USDT0 replay.
+- `MONAD_TESTNET_RPC`: Monad testnet RPC (default `https://testnet-rpc.monad.xyz`).
+- `PRIVATE_KEY`: a testnet key, only to deploy.
+
+The exit agent and the indexer read their own settings: see `apps/agent/.env.example` and `indexer/.env.example`.
+
+**Deploy to Monad testnet:**
+
+```bash
+cd contracts
+DEPLOY_NETWORK=monad-testnet forge script script/Deploy.s.sol --rpc-url "$MONAD_TESTNET_RPC" --broadcast --slow
+```
+
+
+## 9. Use of AI
 - We used Claude Code to write code, tests, and documentation, under our direction and review.
 
